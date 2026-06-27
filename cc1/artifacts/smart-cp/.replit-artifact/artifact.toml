@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Intern Management Suite"
+version = "1.0.0"
+id = "artifacts/smart-cp"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19315
+
+[services.development]
+run = "pnpm --filter @workspace/smart-cp run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/smart-cp", "run", "build" ]
+publicDir = "artifacts/smart-cp/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19315"
+BASE_PATH = "/"

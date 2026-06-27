@@ -1,0 +1,644 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: dms-auth
+    description: DMS authentication
+  - name: dms-users
+    description: DMS user management
+  - name: dms-projects
+    description: DMS project management
+  - name: dms-documents
+    description: DMS document management
+  - name: dms-dashboard
+    description: DMS dashboard and analytics
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ── Auth ────────────────────────────────────────────────────────────────────
+  /dms/auth/login:
+    post:
+      operationId: dmsLogin
+      tags: [dms-auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /dms/auth/me:
+    get:
+      operationId: dmsGetMe
+      tags: [dms-auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DmsUser"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  # ── Users ────────────────────────────────────────────────────────────────────
+  /dms/users:
+    get:
+      operationId: dmsListUsers
+      tags: [dms-users]
+      summary: List all users (Admin only)
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DmsUser"
+    post:
+      operationId: dmsCreateUser
+      tags: [dms-users]
+      summary: Create a new user (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DmsUserInput"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DmsUser"
+
+  /dms/users/{id}:
+    patch:
+      operationId: dmsUpdateUser
+      tags: [dms-users]
+      summary: Update a user (Admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DmsUserUpdate"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DmsUser"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: dmsDeleteUser
+      tags: [dms-users]
+      summary: Delete a user (Admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Projects ─────────────────────────────────────────────────────────────────
+  /dms/projects:
+    get:
+      operationId: dmsListProjects
+      tags: [dms-projects]
+      summary: List all projects with document count
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search by project name
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectWithStats"
+    post:
+      operationId: dmsCreateProject
+      tags: [dms-projects]
+      summary: Create a project (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /dms/projects/{id}:
+    get:
+      operationId: dmsGetProject
+      tags: [dms-projects]
+      summary: Get project details with its documents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project with documents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectWithDocuments"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: dmsUpdateProject
+      tags: [dms-projects]
+      summary: Update a project (Admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: dmsDeleteProject
+      tags: [dms-projects]
+      summary: Delete a project (Admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Documents ─────────────────────────────────────────────────────────────────
+  /dms/documents:
+    get:
+      operationId: dmsListDocuments
+      tags: [dms-documents]
+      summary: List documents (optionally filtered by project or search)
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Document"
+    post:
+      operationId: dmsUploadDocument
+      tags: [dms-documents]
+      summary: Upload a document (Admin only)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/DocumentUploadInput"
+      responses:
+        "201":
+          description: Document uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+
+  /dms/documents/{id}:
+    get:
+      operationId: dmsGetDocument
+      tags: [dms-documents]
+      summary: Get document details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: dmsDeleteDocument
+      tags: [dms-documents]
+      summary: Delete a document (Admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /dms/documents/{id}/download:
+    get:
+      operationId: dmsDownloadDocument
+      tags: [dms-documents]
+      summary: Get download URL for a document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Download info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadInfo"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  # ── Dashboard ─────────────────────────────────────────────────────────────────
+  /dms/dashboard:
+    get:
+      operationId: dmsDashboard
+      tags: [dms-dashboard]
+      summary: Dashboard summary stats and recent activity
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dms/search:
+    get:
+      operationId: dmsSearch
+      tags: [dms-dashboard]
+      summary: Search across projects and documents
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    AuthResult:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/DmsUser"
+
+    # ── Users ─────────────────────────────────────────────────────────────────
+    DmsUser:
+      type: object
+      required: [id, name, email, role, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, staff]
+        createdAt:
+          type: string
+
+    DmsUserInput:
+      type: object
+      required: [name, email, password, role]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, staff]
+
+    DmsUserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, staff]
+
+    # ── Projects ──────────────────────────────────────────────────────────────
+    Project:
+      type: object
+      required: [id, name, type, description, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    ProjectWithStats:
+      type: object
+      required: [id, name, type, description, createdAt, documentCount]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        documentCount:
+          type: integer
+
+    ProjectWithDocuments:
+      type: object
+      required: [id, name, type, description, createdAt, documents]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Document"
+
+    ProjectInput:
+      type: object
+      required: [name, type, description]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+
+    ProjectUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+
+    # ── Documents ─────────────────────────────────────────────────────────────
+    Document:
+      type: object
+      required: [id, title, fileName, fileType, fileSize, projectId, uploadedBy, uploadedByName, createdAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        fileName:
+          type: string
+        fileType:
+          type: string
+        fileSize:
+          type: integer
+        projectId:
+          type: integer
+        projectName:
+          type: ["string", "null"]
+        uploadedBy:
+          type: integer
+        uploadedByName:
+          type: string
+        createdAt:
+          type: string
+
+    DocumentUploadInput:
+      type: object
+      required: [title, projectId]
+      properties:
+        title:
+          type: string
+        projectId:
+          type: integer
+
+    DownloadInfo:
+      type: object
+      required: [url, fileName]
+      properties:
+        url:
+          type: string
+        fileName:
+          type: string
+
+    # ── Dashboard ─────────────────────────────────────────────────────────────
+    ProjectTypeStat:
+      type: object
+      required: [type, count]
+      properties:
+        type:
+          type: string
+        count:
+          type: integer
+
+    DashboardStats:
+      type: object
+      required: [totalProjects, totalDocuments, totalUsers, recentUploads, projectsByType]
+      properties:
+        totalProjects:
+          type: integer
+        totalDocuments:
+          type: integer
+        totalUsers:
+          type: integer
+        recentUploads:
+          type: array
+          items:
+            $ref: "#/components/schemas/Document"
+        projectsByType:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectTypeStat"
+
+    SearchResults:
+      type: object
+      required: [projects, documents]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectWithStats"
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Document"

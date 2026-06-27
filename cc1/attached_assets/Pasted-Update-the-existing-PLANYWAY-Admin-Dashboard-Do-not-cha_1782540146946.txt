@@ -1,0 +1,346 @@
+Update the existing PLANYWAY Admin Dashboard. Do not change the backend, APIs, authentication logic, routing or database. Only improve the UI, fix non-working features, and update naming consistently.
+
+====================================================
+1. COMPANY LOGO UPDATE
+====================================================
+
+Replace the existing company logo everywhere.
+
+Use the uploaded PNG logo as the official company logo.
+
+Remove the old circular logo completely.
+
+Do NOT place the logo inside a circle.
+
+Display only the PNG logo with transparent background.
+
+Replace it in:
+
+• Login Page
+• Sidebar
+• Navbar
+• Dashboard Header
+• Loading Screen
+• Browser Favicon
+• Company Profile
+
+Keep proper padding and responsive sizing.
+
+====================================================
+2. GLOBAL RENAMING
+====================================================
+
+Perform a complete application-wide search and rename.
+
+Student → Intern
+
+Students → Interns
+
+Staff → Employee
+
+Staffs → Employees
+
+STU001 → INT001
+
+STU002 → INT002
+
+Automatically generate
+
+INT001
+INT002
+INT003
+...
+
+Apply this to EVERY page including:
+
+Dashboard
+
+Forms
+
+Tables
+
+Analytics
+
+Reports
+
+Notifications
+
+Search
+
+Profile
+
+Leave
+
+Performance
+
+Calendar
+
+PDF Export
+
+Excel Export
+
+Charts
+
+Cards
+
+Statistics
+
+Filters
+
+====================================================
+3. LOGIN PAGE
+====================================================
+
+Simplify login page.
+
+Only display
+
+Company Logo
+
+Username
+
+Password
+
+Remember Me
+
+Forgot Password
+
+Login Button
+
+Remove
+
+"Enter your corporate credentials to continue"
+
+Remove any extra welcome text.
+
+Remove unnecessary descriptions.
+
+Clean enterprise login page.
+
+====================================================
+4. TASK MANAGEMENT
+====================================================
+
+Many buttons inside Task Management are not working.
+
+Check every action button.
+
+Fix all navigation.
+
+Every option should open correctly.
+
+Examples:
+
+View
+
+Edit
+
+Assign
+
+Delete
+
+Archive
+
+Duplicate
+
+Move
+
+Priority
+
+Comments
+
+Attachments
+
+History
+
+Subtasks
+
+Everything should work.
+
+No dead buttons.
+
+====================================================
+5. APPEARANCE SETTINGS
+====================================================
+
+Currently there are only a few colors.
+
+Add more professional themes.
+
+Themes:
+
+Corporate Blue
+
+Azure
+
+Dark
+
+Light
+
+Graphite
+
+Emerald
+
+Purple
+
+Orange
+
+Crimson
+
+Navy
+
+Forest Green
+
+Automatically save selected theme.
+
+====================================================
+6. COMMAND CENTER
+====================================================
+
+Command Center should work like Microsoft Teams.
+
+Intern Dashboard
+
+Messages sent from Intern should ONLY go to Admin.
+
+Interns should NOT chat with other Interns.
+
+Employees should NOT chat with other Employees unless Admin enables it.
+
+Admin can communicate with everyone.
+
+Message types:
+
+Leave Request
+
+Project Completion
+
+Task Completed
+
+Sprint Update
+
+General Query
+
+Announcement
+
+Bug Report
+
+Feature Request
+
+Admin receives notification immediately.
+
+====================================================
+7. LEAVE PRIVACY
+====================================================
+
+Intern
+
+Can only see
+
+Own Leave
+
+Own Status
+
+Own History
+
+Employee
+
+Can only see
+
+Own Leave
+
+Own Status
+
+Own History
+
+Admin
+
+Can see all leave requests.
+
+====================================================
+8. SIDEBAR
+====================================================
+
+Resource Management
+
+Click manually
+
+Expand
+
+Collapse
+
+PLANYWAY
+
+Click manually
+
+Expand
+
+Collapse
+
+Remember expanded state.
+
+Smooth animation.
+
+====================================================
+9. UI CLEANUP
+====================================================
+
+Reduce extra spacing.
+
+Remove unnecessary cards.
+
+Improve typography.
+
+Improve alignment.
+
+Professional Jira-like layout.
+
+Use modern cards.
+
+Better shadows.
+
+Better spacing.
+
+Enterprise look.
+
+====================================================
+10. FINAL QA
+====================================================
+
+Perform a complete UI audit.
+
+Fix:
+
+Broken buttons
+
+Broken navigation
+
+Broken dropdowns
+
+Broken links
+
+Broken Action menus
+
+Broken Task Management menus
+
+Broken Sprint Planning pages
+
+Broken Calendar links
+
+Broken Command Center actions
+
+Broken Sidebar expansion
+
+Ensure every visible button performs a meaningful action.
+
+No placeholder pages.
+
+No console errors.
+
+No TypeScript errors.
+
+No routing errors.
+
+Responsive across Desktop, Tablet and Mobile.
+
+Deliver a polished enterprise-grade PLANYWAY dashboard similar to Jira, Azure DevOps and Monday.com.

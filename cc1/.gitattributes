@@ -1,0 +1,2 @@
+attached_assets/Intern-Management-Suite_1781603171267.zip filter=lfs diff=lfs merge=lfs -text
+zipFile.zip filter=lfs diff=lfs merge=lfs -text

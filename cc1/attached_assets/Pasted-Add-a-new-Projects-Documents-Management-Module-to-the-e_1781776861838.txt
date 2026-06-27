@@ -1,0 +1,145 @@
+Add a new Projects & Documents Management Module to the existing Intern Management System without affecting current functionality.
+
+MODULE NAME:
+Projects & Documents Repository
+
+REQUIREMENTS:
+
+1. PROJECTS PAGE
+- Create a new sidebar menu called "Projects".
+- Display all projects in card view.
+- Example Projects:
+  - E-Commerce Web Application
+  - UI Design System
+  - HR Management System
+  - Inventory Management System
+
+Each Project Card should contain:
+- Project Name
+- Project Description
+- Created By
+- Created Date
+- Status
+- View Details Button
+
+2. ADD PROJECT
+- Admin and Staff can create projects.
+- Fields:
+  - Project Name
+  - Description
+  - Category
+  - Start Date
+  - End Date
+  - Status
+  - Project Image (Optional)
+- Save to MySQL database.
+
+3. PROJECT DETAILS PAGE
+Display:
+- Project Information
+- Assigned Staff
+- Assigned Students
+- Uploaded Documents
+- Related Documents
+- Project Timeline
+- Activity History
+
+4. DOCUMENT MANAGEMENT
+Inside each project:
+- Upload Documents
+- View Documents
+- Download Documents
+- Delete Documents (Admin only)
+
+Supported Files:
+- PDF
+- DOCX
+- PPT
+- XLSX
+- ZIP
+- Images
+
+5. ROLE BASED ACCESS
+
+Admin:
+- Full Access
+- Create Project
+- Delete Project
+- Upload Documents
+- Delete Documents
+- View All Documents
+
+Staff:
+- Create Project
+- Upload Documents
+- Edit Own Projects
+- View Documents
+
+Student:
+- View Assigned Projects
+- Download Documents
+- Cannot Delete Documents
+
+6. RELATED DOCUMENTS
+Each project should show:
+- Related Documents Section
+- Recently Uploaded Documents
+- Shared Documents
+
+7. SEARCH & FILTER
+- Search Project
+- Search Document
+- Filter by Category
+- Filter by Date
+- Filter by Status
+
+8. DATABASE TABLES
+
+projects
+----------
+id
+project_name
+description
+category
+created_by
+start_date
+end_date
+status
+created_at
+
+documents
+----------
+id
+project_id
+file_name
+file_path
+uploaded_by
+upload_date
+
+project_assignments
+----------
+id
+project_id
+user_id
+role
+
+9. DASHBOARD INTEGRATION
+
+Admin Dashboard:
+- Total Projects
+- Total Documents
+
+Staff Dashboard:
+- My Projects
+
+Student Dashboard:
+- Assigned Projects
+
+10. UI DESIGN
+Follow existing Code Core Global Hi-Tech Solutions theme.
+Use same sidebar and navigation.
+Maintain responsive design.
+
+Analyze existing codebase and integrate this module properly with Flask backend and MySQL database.
+Do not rebuild existing modules.
+Only add and connect the new Projects & Documents Management feature.

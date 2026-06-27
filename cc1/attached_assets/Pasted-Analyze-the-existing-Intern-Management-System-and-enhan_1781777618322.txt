@@ -1,0 +1,305 @@
+Analyze the existing Intern Management System and enhance both the Reports & Analytics Module and Performance Management Module without changing the current UI theme or existing functionality.
+
+====================================================
+REPORTS & ANALYTICS ENHANCEMENT
+====================================================
+
+1. OVERALL SUMMARY
+Move Overall Summary to the top of the Reports page.
+
+Display:
+- Total Students
+- Total Staff
+- Total Interns
+- Total Projects
+- Total Leave Requests
+- Average Attendance
+- Task Completion Percentage
+- Best Performing Department
+- Overall Performance Trend
+
+2. STUDENT ANALYTICS
+
+Add Student Selector:
+- Search Student
+- Student Dropdown/List
+
+When a Student is selected:
+- Profile Summary
+- Attendance Report
+- Leave History
+- Task Completion Report
+- Performance Report
+- Assigned Projects
+- Performance Charts
+
+Add:
+- Date From
+- Date To
+
+Generate reports only for the selected date range.
+
+3. STAFF ANALYTICS
+
+Add Staff Selector:
+- Search Staff
+- Staff Dropdown/List
+
+When a Staff member is selected:
+- Profile Summary
+- Attendance Report
+- Assigned Students Count
+- Leave History
+- Task Completion Statistics
+- Performance Analytics
+
+Add:
+- Date From
+- Date To
+
+Generate reports only for selected date range.
+
+4. REPORT TYPES PANEL
+
+Keep the existing left Report Types panel.
+
+Include:
+- Attendance Report
+- Performance Report
+- Leave Summary
+- Task Completion
+- Program Completion
+- Student Analytics
+- Staff Analytics
+- Project Analytics
+
+5. FILTERS
+
+Add:
+- Student Filter
+- Staff Filter
+- Department Filter
+- Project Filter
+- Date From
+- Date To
+
+6. CHARTS
+
+Generate dynamic charts:
+
+- Attendance Analytics
+- Leave Analytics
+- Performance Analytics
+- Task Completion Analytics
+- Department Comparison Analytics
+
+7. EXPORT OPTIONS
+
+- Export PDF
+- Export Excel
+
+Reports should contain:
+- User Details
+- Attendance
+- Leave History
+- Performance
+- Tasks
+- Projects
+
+8. DATABASE
+
+Fetch all data from MySQL.
+
+Connect with:
+- students
+- staff
+- attendance
+- leave_requests
+- tasks
+- performance_scores
+- projects
+- project_assignments
+
+====================================================
+PERFORMANCE MANAGEMENT ENHANCEMENT
+====================================================
+
+1. SPLIT SCREEN PERFORMANCE PAGE
+
+Left Side:
+STUDENTS
+
+Display:
+- Search Student
+- Student List
+
+Example:
+John
+Ram
+Ramya
+Gobika
+Mowlija
+
+Right Side:
+STAFF
+
+Display:
+- Search Staff
+- Staff List
+
+Example:
+John
+Ram
+Priya
+Harini
+Kani
+
+2. STUDENT ↔ STAFF ASSIGNMENT
+
+Add button:
+
+[ Assign Staff ]
+[ Change Staff ]
+
+Workflow:
+- Select Student
+- Select Staff
+- Click Assign
+- Update MySQL database
+- Store assignment history
+- Show success notification
+
+3. PERFORMANCE MANAGEMENT PANEL
+
+When Student or Staff is clicked:
+
+Open Performance Management Panel.
+
+Display:
+
+Profile Summary:
+- Name
+- Department
+- Role
+- Assigned Staff
+- Internship Duration
+
+Performance Metrics:
+- Attendance Score
+- Task Completion Score
+- Communication Score
+- Discipline Score
+- Technical Skills Score
+- Learning Progress Score
+
+Overall Score:
+- Auto Calculate Percentage
+- Show Grade
+
+4. PERFORMANCE CHARTS
+
+Display:
+- Monthly Performance Trend
+- Attendance Trend
+- Task Completion Trend
+- Student vs Department Comparison
+- Staff vs Department Comparison
+
+5. FEEDBACK SYSTEM
+
+Staff:
+- Give Feedback to Students
+
+Admin:
+- Give Feedback to Staff
+
+Store:
+- Feedback History
+- Monthly Reviews
+
+6. PERFORMANCE HISTORY
+
+Display:
+- Previous Scores
+- Review History
+- Improvement Trend
+- Performance Timeline
+
+7. ROLE ACCESS
+
+Admin:
+- Full Access
+- View All Performance
+- Assign Student ↔ Staff
+- Edit Scores
+- Generate Reports
+
+Staff:
+- View Assigned Students
+- Add Performance Scores
+- Add Feedback
+
+Student:
+- View Own Performance Only
+
+8. DATABASE TABLES
+
+Verify/Create:
+
+student_staff_mapping
+---------------------
+id
+student_id
+staff_id
+assigned_date
+assigned_by
+
+performance_scores
+---------------------
+id
+user_id
+role
+attendance_score
+task_score
+communication_score
+discipline_score
+technical_score
+learning_score
+overall_score
+feedback
+created_at
+
+performance_reviews
+---------------------
+id
+user_id
+reviewer_id
+review_text
+review_date
+
+9. DASHBOARD INTEGRATION
+
+Admin Dashboard:
+- Top Performers
+- Lowest Performers
+- Department Ranking
+
+Staff Dashboard:
+- Assigned Students Performance
+
+Student Dashboard:
+- My Performance Summary
+
+====================================================
+GENERAL REQUIREMENTS
+====================================================
+
+- Keep existing Code Core Global Hi-Tech Solutions theme.
+- Keep current sidebar navigation.
+- Do not remove existing Reports page.
+- Do not rebuild project from scratch.
+- Analyze current codebase and extend existing functionality.
+- Connect everything with Flask backend and MySQL database.
+- Use real database data only.
+- Fix broken links, buttons, APIs and database connections if found.
+- Ensure all reports, analytics and performance pages are fully functional and responsive.

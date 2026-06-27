@@ -1,0 +1,195 @@
+Modify the existing Student Management System frontend and backend. Fix the following issues without changing the existing UI design or breaking any current functionality.
+
+==================================================
+1. STUDENT MANAGEMENT
+==================================================
+
+The following buttons are currently not working:
+
+- Add Student
+- Export
+
+Fix both functionalities.
+
+Requirements:
+
+Add Student
+- Open the Add Student modal/form.
+- Validate all required fields.
+- Save the student successfully.
+- Update the student table immediately after saving.
+- Show success/error notifications.
+- Close the modal after successful submission.
+
+Export
+- Export all student records.
+- Support CSV and PDF export.
+- Include all table columns.
+- Download the file successfully.
+- Show a loading indicator while exporting.
+
+==================================================
+2. STAFF MANAGEMENT
+==================================================
+
+The following buttons are also not working:
+
+- Add Staff
+- Export
+
+Fix both functionalities.
+
+Requirements:
+
+Add Staff
+- Open the Add Staff form.
+- Validate required fields.
+- Save new staff member.
+- Refresh the staff table automatically.
+- Display success/error messages.
+
+Export
+- Export complete staff records.
+- Support CSV and PDF.
+- Download successfully.
+
+==================================================
+3. ADMIN DASHBOARD
+==================================================
+
+The dashboard currently displays:
+
+"6 Unread Messages"
+
+but clicking it does nothing.
+
+Fix this feature.
+
+Requirements:
+
+- Clicking unread messages should open the Messages page or modal.
+- Display all unread messages.
+- Show:
+  - Sender Name
+  - Subject
+  - Message Preview
+  - Date & Time
+  - Read/Unread Status
+- Mark a message as read.
+- Update the unread message count automatically.
+- If there are no unread messages, display:
+  "No unread messages."
+
+==================================================
+4. LEAVE MANAGEMENT
+==================================================
+
+Improve Leave Rejection.
+
+Whenever Admin rejects a leave request, Admin must provide a rejection reason.
+
+Required fields:
+
+- Leave Status
+- Reject Button
+- Rejection Reason (Mandatory)
+
+Examples:
+
+- Insufficient leave balance.
+- Staff shortage during requested dates.
+- Invalid supporting documents.
+- Leave request overlaps with examinations.
+- Request submitted after deadline.
+- Other (Custom Reason)
+
+Display for staff:
+
+Rejected
+
+Reason:
+<Admin entered reason>
+
+The rejection reason should appear in:
+
+- Leave History
+- Leave Details
+- Staff Dashboard
+
+==================================================
+5. REPORTS & ANALYSIS
+==================================================
+
+The following buttons are not working:
+
+- Export
+- Share
+
+Fix both.
+
+Export Requirements:
+
+- Export reports as PDF.
+- Export reports as CSV.
+- Export charts and tables.
+- Show loading animation.
+- Download automatically.
+
+Share Requirements:
+
+Allow sharing through:
+
+- Email
+- Copy Link
+- WhatsApp
+- Microsoft Teams (optional)
+
+Generate a shareable report link and show a success notification after sharing.
+
+==================================================
+6. VALIDATION
+==================================================
+
+Ensure every button has proper functionality.
+
+Verify:
+
+✔ Add Student works
+✔ Export Student works
+✔ Add Staff works
+✔ Export Staff works
+✔ Admin unread messages open correctly
+✔ Message count updates automatically
+✔ Leave rejection requires a reason
+✔ Staff can view rejection reason
+✔ Reports Export works
+✔ Reports Share works
+
+==================================================
+7. ERROR HANDLING
+==================================================
+
+Implement proper error handling.
+
+- Prevent duplicate submissions.
+- Display loading indicators.
+- Show success notifications.
+- Show error notifications.
+- Handle API failures gracefully.
+- Disable buttons while processing.
+
+==================================================
+8. FINAL CHECK
+==================================================
+
+Ensure:
+
+✔ No console errors
+✔ No TypeScript errors
+✔ No routing errors
+✔ No build errors
+✔ Responsive UI
+✔ Existing design remains unchanged
+✔ Existing features continue working correctly
+
+Implement all fixes while preserving the current project structure, UI, and user experience.

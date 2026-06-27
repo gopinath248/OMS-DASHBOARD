@@ -1,0 +1,237 @@
+Modify the existing Student Management System frontend without breaking the current UI design. Implement the following changes carefully and ensure all components work correctly.
+
+========================
+1. STUDENT DASHBOARD - CALENDAR
+========================
+
+Fix the "Add Event" functionality because it is currently not working.
+
+Update the "Add New Event" modal/form with the following fields:
+
+- Event Title
+- Event Description
+- Event Date
+- Event Time (Time Picker)
+- Session
+    - Forenoon
+    - Afternoon
+- Priority
+- Assigned Members (Multiple Selection)
+- Location (Optional)
+
+Requirements:
+- Time picker should be mandatory.
+- Session should be selectable.
+- Multiple members can be selected.
+- Selected members should be displayed as chips/tags.
+- Save Event button should work.
+- Edit/Delete event should continue working.
+
+========================
+2. PROJECT REPOSITORY
+========================
+
+Modify the "My Project Repository".
+
+Instead of showing only project cards, create three professional sections.
+
+Section 1:
+- Active Projects
+
+Each project card should display:
+- Project Name
+- Description
+- Technology Stack
+- Progress Bar
+- Team Members
+- Start Date
+- Deadline
+- Status
+
+Section 2:
+- Active Plans
+
+Display:
+- Plan Title
+- Description
+- Target Date
+- Priority
+- Assigned Members
+- Completion Percentage
+
+Section 3:
+- Completed Plans
+
+Display:
+- Plan Title
+- Description
+- Completed Date
+- Final Status
+- Remarks
+
+Use professional dashboard cards.
+
+========================
+3. PROJECT COUNTS
+========================
+
+Currently:
+
+My Project Repository
+shows
+4 Active Plans
+
+But
+
+All Project Active Plans
+shows only
+1 project.
+
+Fix the logic.
+
+Requirements:
+- Every student's projects should be loaded.
+- All Active Plans should display every available project.
+- Counts should match actual data.
+- Dashboard statistics should update automatically.
+
+========================
+4. STAFF DASHBOARD
+========================
+
+Add complete Leave Management.
+
+Create new section:
+
+Leave Management
+
+Include:
+
+- Apply Leave
+- Leave History
+- Pending Requests
+- Approved Leave
+- Rejected Leave
+
+For rejected leave display:
+
+Reason for Rejection
+
+Example:
+
+Rejected
+Reason:
+"Insufficient leave balance."
+
+Leave details:
+
+- Leave Type
+- From Date
+- To Date
+- Number of Days
+- Status
+- Applied Date
+- Reason
+- Rejection Reason
+
+Also improve Staff Dashboard by adding:
+
+- Attendance Summary
+- Upcoming Tasks
+- Assigned Classes
+- Notifications
+- Recent Activities
+- Leave Balance
+
+========================
+5. ADMIN DASHBOARD
+========================
+
+Remove completely:
+
+Shift Management
+
+Delete:
+- Sidebar menu
+- Routes
+- Components
+- Navigation links
+- Cards
+- API calls if unused
+
+========================
+6. MY TASK DASHBOARD
+========================
+
+Remove completely:
+
+- Review
+- Testing
+
+Remove them from:
+
+- Progress
+- Status
+- Timeline
+- Filters
+- Cards
+
+Do not affect remaining task workflow.
+
+========================
+7. CALENDAR MEMBERS
+========================
+
+Improve member assignment.
+
+Currently only one member can be assigned.
+
+Change it to:
+
+Multiple Members
+
+Features:
+
+- Multi-select dropdown
+- Search users
+- Select multiple users
+- Display avatars/chips
+- Remove selected members
+- Store all assigned members
+
+========================
+8. GENERAL IMPROVEMENTS
+========================
+
+Maintain existing UI theme.
+
+Ensure:
+
+✔ Responsive Design
+✔ No TypeScript errors
+✔ No build errors
+✔ No console errors
+✔ Proper validation
+✔ Smooth animations
+✔ Professional UI
+
+========================
+9. TESTING
+========================
+
+Verify:
+
+✔ Add Event works
+✔ Time saves correctly
+✔ Forenoon/Afternoon saves correctly
+✔ Multiple members save correctly
+✔ Staff Leave module works
+✔ Rejected leave reason displays
+✔ Shift Management removed
+✔ Review & Testing removed
+✔ Active Plan count is correct
+✔ All projects display correctly
+✔ Repository sections render properly
+✔ No existing functionality is broken
+
+Implement all these changes while preserving the existing project structure and UI consistency.

@@ -1,0 +1,333 @@
+Perform a complete consistency update across the entire application. Do not change the existing design, backend architecture, permissions, or database structure. Fix all naming inconsistencies and enable non-working features.
+
+==================================================
+COMPLETE ENTITY RENAMING
+==================================================
+
+Currently only menu names are renamed.
+
+I need ALL internal references renamed everywhere.
+
+Change:
+
+Student → Intern
+Students → Interns
+
+Staff → Employee
+Staffs → Employees
+
+Apply this to:
+
+- Dashboard
+- Forms
+- Tables
+- Reports
+- Analytics
+- Notifications
+- Search Results
+- Profile Pages
+- Export Files
+- PDF Reports
+- Detail Pages
+- Create Forms
+- Edit Forms
+- API Responses shown in UI
+- Modals
+- Empty States
+- Cards
+- Filters
+- Statistics
+
+==================================================
+ID FORMAT CHANGES
+==================================================
+
+Replace all Student IDs.
+
+Examples:
+
+STU001 → INT001
+STU002 → INT002
+STU003 → INT003
+
+All newly created interns should automatically generate:
+
+INT001
+INT002
+INT003
+INT004
+
+Similarly update all labels and references.
+
+==================================================
+SPRINT PLANNING FIXES
+==================================================
+
+Currently Sprint Planning dropdown arrows exist but many options are not opening.
+
+Fix all expandable menu items.
+
+When user clicks the arrow:
+
+- Expand section
+- Show child options
+- Allow navigation
+- Allow access to pages
+- Allow CRUD operations
+
+Ensure all Sprint Planning options are fully functional.
+
+No dead buttons.
+
+No broken navigation.
+
+No placeholder actions.
+
+==================================================
+DATE & YEAR FIXES
+==================================================
+
+Currently some pages show:
+
+June 2024
+
+Update all date-related pages to use the current system year.
+
+Show:
+
+2026
+
+Update:
+
+- Calendar
+- Sprint Planning
+- Reports
+- Timeline
+- Dashboard Widgets
+- Project Dates
+- Sprint Dates
+
+Use dynamic dates instead of hardcoded 2024 values.
+
+==================================================
+COMMAND CENTER ENHANCEMENT
+==================================================
+
+Transform "Commands" into a real-time communication hub.
+
+Rename:
+
+Commands
+→ Command Center
+
+Purpose:
+
+Internal communication between Admin, Employees, and Interns.
+
+==================================================
+COMMAND CENTER FEATURES
+==================================================
+
+Create a modern conversation board.
+
+Features:
+
+Company Announcements
+
+Leave Notifications
+
+Project Updates
+
+Task Completion Notifications
+
+Sprint Updates
+
+Employee Messages
+
+Intern Messages
+
+Admin Broadcasts
+
+Team Discussions
+
+Mentions (@user)
+
+Replies
+
+Thread Conversations
+
+Pinned Messages
+
+Unread Counters
+
+Message Search
+
+File Attachments
+
+Emoji Reactions
+
+Priority Messages
+
+==================================================
+REAL-TIME NOTIFICATIONS
+==================================================
+
+Example Scenarios:
+
+When Intern submits leave:
+→ Admin receives notification.
+
+When Employee submits leave:
+→ Admin receives notification.
+
+When project task is completed:
+→ Assigned Manager receives notification.
+
+When sprint story is completed:
+→ Sprint Owner receives notification.
+
+When leave is approved:
+→ Employee/Intern receives notification.
+
+When leave is rejected:
+→ Employee/Intern receives notification.
+
+When a new project is assigned:
+→ Assigned user receives notification.
+
+==================================================
+AI ASSISTANT STYLE COMMAND BOARD
+==================================================
+
+Add a conversation panel similar to:
+
+Microsoft Teams
+Slack
+Discord
+ChatGPT Style Chat Layout
+
+Features:
+
+Message Input Box
+
+Send Button
+
+Recent Conversations
+
+Conversation Threads
+
+User Presence Status
+
+Notification Badge
+
+Quick Actions
+
+Activity Feed
+
+==================================================
+COMMAND BOARD PANELS
+==================================================
+
+Left Panel:
+
+Announcements
+
+Projects
+
+Leave Requests
+
+Sprint Updates
+
+Employees
+
+Interns
+
+Direct Messages
+
+Archives
+
+Center Panel:
+
+Conversation Window
+
+Right Panel:
+
+Notifications
+
+Recent Activities
+
+Upcoming Tasks
+
+Pending Approvals
+
+==================================================
+ADMIN ALERTS
+==================================================
+
+Create automatic alerts for Admin:
+
+New Leave Request
+
+Project Completed
+
+Sprint Completed
+
+New Employee Added
+
+New Intern Added
+
+Missed Deadline
+
+Blocked Sprint Story
+
+High Priority Bug
+
+All alerts should appear in:
+
+Notification Center
+
+Command Center
+
+Dashboard Notification Widget
+
+==================================================
+UI IMPROVEMENTS
+==================================================
+
+Use modern enterprise UI.
+
+Inspired by:
+
+Microsoft Teams
+
+Slack
+
+Jira
+
+Azure DevOps
+
+Professional corporate design.
+
+==================================================
+TECHNICAL REQUIREMENTS
+==================================================
+
+Fix all broken buttons.
+
+Fix all non-working dropdowns.
+
+Fix all non-working arrows.
+
+Fix all routing issues.
+
+Fix all date inconsistencies.
+
+No console errors.
+
+No TypeScript errors.
+
+No broken links.
+
+Production-ready implementation.
+
+Keep existing backend integration intact.

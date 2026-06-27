@@ -1,0 +1,94 @@
+Update the PLANYWAY application branding by replacing the existing company logo with the uploaded logo image.
+
+==================================================
+LOGO REPLACEMENT
+==================================================
+
+Replace the current logo everywhere in the application with the uploaded logo.
+
+Requirements:
+
+• Remove the old logo completely.
+• Do NOT place the new logo inside any circle, square, border, badge, or background container.
+• Use the logo exactly as provided.
+• Preserve the logo's aspect ratio (no stretching or cropping).
+• Keep the transparent background if available.
+• Ensure the logo is crisp on all screen sizes.
+
+==================================================
+REPLACE THE LOGO IN ALL LOCATIONS
+==================================================
+
+Replace the logo in:
+
+• Sidebar Header
+• Collapsed Sidebar
+• Login Page
+• Top Navigation Bar
+• Dashboard Header
+• Loading Screen
+• Browser Favicon (if supported)
+• Company Profile
+• About Page
+• Any modal or component using the old logo
+
+Remove every reference to the previous logo.
+
+==================================================
+SIDEBAR HEADER
+==================================================
+
+Display the uploaded logo exactly like this:
+
+[Company Logo]
+
+CODE CORE GLOBAL
+Hi-Tech Solutions
+
+PLANYWAY
+
+The logo should be aligned neatly on the left with proper spacing.
+
+If the sidebar is collapsed:
+• Show only the logo.
+• Display a tooltip with "CODE CORE GLOBAL - PLANYWAY" on hover.
+
+==================================================
+RESPONSIVE DESIGN
+==================================================
+
+Desktop:
+Logo width around 180–220px.
+
+Tablet:
+Automatically scale.
+
+Mobile:
+Smaller logo without distortion.
+
+==================================================
+DO NOT CHANGE
+==================================================
+
+Do NOT modify:
+
+• Backend
+• Database
+• Authentication
+• APIs
+• Routes
+• Dashboard functionality
+• Colors
+• Existing layout
+
+Only replace the logo.
+
+==================================================
+FINAL CHECK
+==================================================
+
+Verify there are no remaining references to the old logo.
+
+Ensure the uploaded logo is used consistently across the entire application.
+
+The application should display the new company branding professionally without affecting any existing functionality.

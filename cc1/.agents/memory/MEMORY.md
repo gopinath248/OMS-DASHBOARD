@@ -1,0 +1,1 @@
+- [Vite workspace imports](vite-workspace-imports.md) — relative `../lib/` imports in DMS fail; always use the `@` alias (`@/lib/auth`, `@/lib/utils`) for intra-artifact lib imports.

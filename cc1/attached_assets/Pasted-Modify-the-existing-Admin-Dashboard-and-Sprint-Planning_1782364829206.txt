@@ -1,0 +1,422 @@
+Modify the existing Admin Dashboard and Sprint Planning module with the following changes. Keep all existing functionality, backend connections, routes, permissions, and theme intact.
+
+==================================================
+GLOBAL RENAMING CHANGES
+==================================================
+
+1. Rename all occurrences of:
+
+"IMS Portal" → "PLANYWAY"
+
+"Planway" → "PLANYWAY"
+
+"Staff" → "Employees"
+
+"Students" → "Interns"
+
+Apply these changes throughout:
+- Sidebar
+- Dashboard
+- Page Titles
+- Navigation
+- Forms
+- Reports
+- Tables
+- Notifications
+- Search Results
+- Breadcrumbs
+- Headers
+
+==================================================
+LOGIN PAGE CHANGES
+==================================================
+
+Simplify the login page.
+
+Remove:
+- Admin Selection
+- Staff Selection
+- Student Selection
+- Any Role Selection Cards
+
+Keep only:
+
+PLANYWAY Logo
+
+Username Field
+
+Password Field
+
+Remember Me
+
+Forgot Password
+
+Sign In Button
+
+Professional corporate login layout.
+
+==================================================
+SIDEBAR CHANGES
+==================================================
+
+Update sidebar structure:
+
+RESOURCE MANAGEMENT
+    Interns
+    Employees
+    Performance
+    Reports
+    Leave Management
+    Notifications
+    Salary Management
+    Calendar
+    Settings
+    Commands
+
+PLANYWAY
+    Sprint Planning
+
+Use accordion/collapsible navigation.
+
+Professional enterprise UI.
+
+==================================================
+SPRINT PLANNING ENHANCEMENT
+==================================================
+
+Create a dedicated Sprint Planning module under:
+
+PLANYWAY
+    └── Sprint Planning
+
+This should look like a modern Jira + Azure DevOps workspace.
+
+==================================================
+SPRINT LIST PANEL
+==================================================
+
+Display sprint cards vertically one below another.
+
+Example:
+
+Current Sprint
+June 16 – June 30
+
+Next Sprint
+July 1 – July 15
+
+Sprint 3
+July 16 – July 31
+
+Sprint 4
+August 1 – August 15
+
+Sprint 5
+August 16 – August 31
+
+Previous Sprint
+Completed Sprint Archive
+
+Each sprint card should be clickable.
+
+On click:
+Open detailed Kanban Board.
+
+==================================================
+SPRINT ACTIONS
+==================================================
+
+Add:
+
++ Create Sprint
+
++ Add Story
+
++ Add Epic
+
++ Add Bug
+
++ Add Change Request
+
++ Add Service Request
+
+View Sprint
+
+Sprint Analytics
+
+Calendar View
+
+Sprint Archive
+
+==================================================
+JIRA STYLE TICKET TYPES
+==================================================
+
+Replace old ticket IDs.
+
+Remove:
+TASK001
+TASK002
+TASK003
+
+Add Jira-style ticket formats:
+
+CC26BUG-001
+CC26BUG-002
+
+CC26CR-001
+CC26CR-002
+
+CC26SR-001
+CC26SR-002
+
+CC26IPM-001
+CC26IPM-002
+
+CC26EPIC-001
+CC26EPIC-002
+
+Ticket Type Meanings:
+
+CC26BUG = Bug
+
+CC26CR = Change Request
+
+CC26SR = Service Request
+
+CC26IPM = Internal Project Management
+
+CC26EPIC = Epic
+
+Show different icons and colors for each type.
+
+==================================================
+KANBAN BOARD CHANGES
+==================================================
+
+Rename columns:
+
+Pending
+→ To Do
+
+Completed
+→ Done Story
+
+Blockout
+→ Blocked Story
+
+Final workflow:
+
+To Do
+
+↓
+
+In Progress
+
+↓
+
+Testing
+
+↓
+
+Review
+
+↓
+
+Done Story
+
+OR
+
+Blocked Story
+
+Enable drag and drop.
+
+==================================================
+PROFESSIONAL SPRINT MANAGEMENT
+==================================================
+
+Each sprint should contain:
+
+Sprint Goal
+
+Sprint Capacity
+
+Sprint Velocity
+
+Sprint Burndown
+
+Story Points
+
+Team Members
+
+Progress %
+
+Remaining Work
+
+Completed Work
+
+Blocked Work
+
+Risk Indicator
+
+Priority Matrix
+
+Sprint Health
+
+==================================================
+GOOGLE CALENDAR STYLE CALENDAR
+==================================================
+
+Replace current calendar.
+
+Create a Google Calendar inspired interface.
+
+Features:
+
+Day View
+
+Week View
+
+Month View
+
+Agenda View
+
+Today Button
+
+Search Events
+
+Create Event
+
+Edit Event
+
+Delete Event
+
+Recurring Events
+
+Drag and Drop Events
+
+Color Categories
+
+Sprint Schedule
+
+Employee Leaves
+
+Intern Activities
+
+Meetings
+
+Project Deadlines
+
+Company Events
+
+Notifications
+
+Reminder Alerts
+
+Upcoming Events Panel
+
+Event Details Popup
+
+Mini Calendar Navigation
+
+Calendar Filters
+
+Export Calendar
+
+Print Calendar
+
+Dark Mode Support
+
+Responsive Mobile View
+
+Smooth Navigation
+
+==================================================
+SPRINT ANALYTICS
+==================================================
+
+Add dashboard cards:
+
+Active Sprint
+
+Sprint Velocity
+
+Story Completion %
+
+Blocked Stories
+
+Open Bugs
+
+Open Change Requests
+
+Open Service Requests
+
+Total Story Points
+
+Burndown Progress
+
+Team Capacity
+
+Sprint Health Score
+
+==================================================
+CORPORATE UI IMPROVEMENTS
+==================================================
+
+Make Sprint Planning look like:
+
+Jira Software
+
+Azure DevOps Boards
+
+Monday.com
+
+Linear
+
+Use:
+
+Professional cards
+
+Modern Kanban
+
+Enterprise tables
+
+Smooth animations
+
+Status badges
+
+Priority indicators
+
+Story point chips
+
+Assignee avatars
+
+Collapsible sprint panels
+
+Professional typography
+
+Responsive layouts
+
+==================================================
+TECHNICAL REQUIREMENTS
+==================================================
+
+Do not break existing backend.
+
+Do not remove current functionality.
+
+Maintain all routes.
+
+Maintain permissions.
+
+Maintain theme colors.
+
+No TypeScript errors.
+
+No console errors.
+
+Production-ready enterprise UI.
+
+Fully responsive.
+
+Corporate-grade Sprint Planning experience.

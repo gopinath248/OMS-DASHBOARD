@@ -1,0 +1,509 @@
+You are a Senior Full Stack Engineer, UI/UX Designer, and React Architect.
+
+Completely refactor the entire PLANWAY Admin Dashboard into a premium enterprise application. Do NOT make partial changes. Apply every modification globally across all pages, components, routes, dialogs, tables, forms, cards, modals, and APIs while preserving existing authentication and database functionality.
+
+=================================================================
+GLOBAL BRANDING
+=================================================================
+
+• Replace every existing logo with the provided Golden "PL" logo.
+• Use Gold (#D4AF37) as the primary branding color.
+• Replace all occurrences of "Sign In" with "Planway".
+• Center the logo with:
+      Corecode Global
+      PLANWAY
+
+=================================================================
+LOGIN PAGE
+=================================================================
+
+• Username (Email) → User ID
+• Placeholder:
+      Admin@corecode.global
+      →
+      AarthiCC001
+
+Delete:
+
+• Sign in as
+• Remember me for 30 days
+
+Keep authentication working exactly as before.
+
+=================================================================
+RESOURCE MANAGEMENT
+=================================================================
+
+Rename:
+
+Resource Management
+→
+Intern Management
+
+Delete:
+
+Manage intern profiles, assignments and statuses.
+
+Rename
+
+Student
+→ Intern
+
+Department
+→ Designation
+
+All Department
+→ All Designation
+
+Email
+→ User ID
+
+alicejohnson@corecode.global
+→ AliceCC001
+
+Requirements
+
+• Remove every Email column.
+• Display only User IDs.
+• Active button must toggle correctly.
+• Fix every Action button.
+• Active Project must open Project Details page.
+• Show Project Description.
+
+=================================================================
+EMPLOYEE MANAGEMENT
+=================================================================
+
+Delete
+
+Manage mentors, HR and administrative staff.
+
+Rename
+
+Department
+→ Designation
+
+All Department
+→ All Designation
+
+Intern Assigned
+
+When clicked
+
+Open dedicated page displaying
+
+• Assigned Mentor
+• Assigned Project
+• Assigned Date
+• Due Date
+• Description
+• Current Status
+
+Three Dots (⋮)
+
+Must open Context Menu
+
+Options
+
+• View
+• Edit
+• Assign
+• Remove
+• Delete
+
+=================================================================
+PERFORMANCE MANAGEMENT
+=================================================================
+
+Delete
+
+Track and evaluate Intern Performance Metrics
+
+Rename
+
+Alice Johnson – CSE
+
+to
+
+Name – Designation
+
+Display
+
+• Name
+• User ID
+• Designation
+• Rating
+• Attendance
+• Task Completion
+• Performance Score
+
+=================================================================
+REPORTS & ANALYSIS
+=================================================================
+
+Delete
+
+Generate and export comprehensive system reports.
+
+Fix every Date Picker.
+
+Use
+
+DD-MM-YYYY
+
+throughout the application.
+
+=================================================================
+LEAVE MANAGEMENT
+=================================================================
+
+Delete
+
+Review and Manage Intern Leave Requests.
+
+Rename
+
+Search Student
+
+→
+
+Search Employees
+
+Keep approval and rejection workflows functional.
+
+=================================================================
+SALARY MANAGEMENT
+=================================================================
+
+Convert complete module to Indian Payroll.
+
+Currency
+
+$
+→
+₹
+
+Delete
+
+Salary Bands
+
+Payroll, Compensation & Payment Schedules
+
+Replace
+
+₹60,000
+
+with
+
+₹5,000
+
+Remove Department column.
+
+Use INR everywhere.
+
+Fix
+
+Export Payroll
+
+Generate working PDF.
+
+Payslip
+
+View
+
+↓
+
+Open detailed payslip.
+
+Download PDF
+
+↓
+
+Generate downloadable PDF.
+
+=================================================================
+CALENDAR
+=================================================================
+
+Delete
+
+Schedule Events, Sprint Dates and Intern Activities.
+
+Clicking any date should
+
+Open Add Event modal.
+
+Replace
+
+Today
+
+↓
+
+Month
+
+Delete
+
+Shift
+
+from filters.
+
+Calendar should function similar to Google Calendar.
+
+=================================================================
+SETTINGS
+=================================================================
+
+Delete
+
+Manage your account settings and preferences.
+
+Delete
+
+Update your personal information.
+
+Avatar
+
+Click Avatar
+
+↓
+
+Open Avatar Preview
+
+Allow Upload
+
+Delete
+
+JPG PNG GIF Max 2MB
+
+Rename
+
+Email
+
+↓
+
+User ID
+
+Delete
+
+Password Dashboard
+
+Delete
+
+Update your account password.
+
+Appearance
+
+Apply Premium Golden Theme.
+
+Replace Color Mode with
+
+Theme
+
+Options
+
+• Light
+• Dark
+• System
+
+Delete
+
+Accent Color
+
+Delete
+
+Manage Two-Factor Authentication and Active Sessions.
+
+Delete
+
+Add an extra layer of security...
+
+Delete
+
+Current Session Logged in on Jun 25 2026
+
+=================================================================
+COMMAND CENTER (FULL REDESIGN)
+=================================================================
+
+Completely redesign the Command Center inspired by WhatsApp Desktop while maintaining enterprise professionalism.
+
+Layout
+
+Three-panel interface.
+
+LEFT SIDEBAR
+
+• Golden PLANWAY Logo
+• Dashboard
+• Interns
+• Employees
+• Projects
+• Salary
+• Calendar
+• Reports
+• Settings
+
+Rounded icons.
+
+Collapsible Sidebar.
+
+MIDDLE PANEL
+
+Conversation-style Activity Feed.
+
+Each activity card displays
+
+• Avatar
+• Name
+• Last Activity
+• Timestamp
+• Status Badge
+
+Search bar at top.
+
+Unread badges.
+
+RIGHT PANEL
+
+When activity selected display
+
+• Complete Details
+• Attachments
+• Timeline
+• Assigned Employee
+• Comments
+• Status
+• Approve
+• Reject
+• Edit
+• Archive
+
+Sticky Header.
+
+Scrollable content.
+
+Responsive.
+
+=================================================================
+NOTIFICATIONS
+=================================================================
+
+Redesign like WhatsApp.
+
+Support
+
+• Unread Badge
+• Live Updates
+• Search
+• Mark as Read
+• Delete
+• Archive
+• Filters
+
+All
+Unread
+Approved
+Pending
+Rejected
+
+=================================================================
+UI DESIGN
+=================================================================
+
+Premium Enterprise Theme.
+
+Primary Color
+
+#D4AF37
+
+Background
+
+#F8F8F8
+
+Cards
+
+White
+
+Border Radius
+
+16px
+
+Soft Shadows
+
+Glassmorphism where appropriate.
+
+Smooth animations.
+
+Rounded buttons.
+
+Professional typography.
+
+Consistent spacing.
+
+Fully Responsive.
+
+=================================================================
+FUNCTIONAL FIXES
+=================================================================
+
+Fix ALL broken buttons and interactions.
+
+Ensure these work:
+
+• Add
+• Edit
+• Delete
+• Export
+• Share
+• Download PDF
+• Active Toggle
+• Calendar Events
+• Avatar Upload
+• Project Details
+• Context Menu
+• Notifications
+• Reports Export
+• Salary Export
+• Payslip PDF
+• Assigned Details
+• Search
+• Filters
+• Pagination
+• Sorting
+
+=================================================================
+CODE QUALITY
+=================================================================
+
+• Remove unused components.
+• Remove dead code.
+• Remove placeholder text.
+• Preserve authentication.
+• Preserve APIs.
+• Preserve database structure.
+• Refactor duplicated code.
+• Use reusable React components.
+• Follow modern React best practices.
+• Optimize performance.
+• Improve accessibility.
+• Ensure responsive layouts.
+
+=================================================================
+FINAL RESULT
+=================================================================
+
+Deliver a polished, production-ready PLANWAY Admin Dashboard with:
+
+✔ Golden branding
+✔ Intern Management terminology
+✔ Indian Rupee (₹) payroll
+✔ Fully working action buttons
+✔ Interactive calendar
+✔ WhatsApp-style Command Center
+✔ Working notifications
+✔ PDF exports
+✔ Premium enterprise UI
+✔ Responsive design
+✔ No placeholder content
+✔ No broken functionality
+✔ Consistent branding throughout the application.

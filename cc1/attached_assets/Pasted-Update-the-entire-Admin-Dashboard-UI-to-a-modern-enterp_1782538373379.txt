@@ -1,0 +1,526 @@
+Update the entire Admin Dashboard UI to a modern enterprise project management system. Keep the backend, database, authentication, routes and APIs unchanged. Only improve the UI, UX and functionality.
+
+====================================================
+1. SIDEBAR IMPROVEMENTS
+====================================================
+
+Make the sidebar completely collapsible.
+
+Default:
+Only icons should be visible.
+
+When clicked:
+Expand the menu.
+
+When clicking
+
+▶ Resource Management
+
+show
+
+• Interns
+• Employees
+• Performance
+• Reports
+• Leave Management
+• Salary
+• Calendar
+• Notifications
+• Settings
+• Command Center
+
+When clicking
+
+▶ PLANYWAY
+
+show
+
+• Dashboard
+• Sprint Planning
+• Backlog
+• Active Sprint
+• Sprint Archive
+• Analytics
+• Calendar
+
+Use smooth slide animation.
+
+Allow users to collapse manually.
+
+Remember last opened state.
+
+====================================================
+2. COMMAND CENTER REDESIGN
+====================================================
+
+Current Command page has too many cards.
+
+Redesign it like Microsoft Teams or Slack.
+
+Layout:
+
+-----------------------------------
+
+LEFT PANEL
+
+Announcements
+
+Channels
+
+Projects
+
+Leave Requests
+
+Sprint Updates
+
+Employees
+
+Interns
+
+Pinned Messages
+
+Archived
+
+-----------------------------------
+
+CENTER PANEL
+
+Conversation Window
+
+Example
+
+Admin
+
+Good morning Team.
+
+Development Sprint starts today.
+
+Employee
+
+Sprint 3 completed.
+
+Intern
+
+Leave request submitted.
+
+Admin
+
+Approved.
+
+Show
+
+Message Bubble
+
+Timestamp
+
+Profile Image
+
+Read Status
+
+Typing Indicator
+
+Emoji Reaction
+
+Reply
+
+Thread
+
+Attachment
+
+Search
+
+-----------------------------------
+
+RIGHT PANEL
+
+Today's Activities
+
+Pending Leave
+
+Sprint Progress
+
+Upcoming Meetings
+
+Recent Notifications
+
+Quick Actions
+
+-----------------------------------
+
+Only users involved in a conversation should see that conversation.
+
+Interns should NOT see other Interns' leave requests.
+
+Employees should NOT see other Employees' private requests.
+
+Only Admin can see all requests.
+
+====================================================
+3. LEAVE PERMISSION
+====================================================
+
+Intern
+
+Can only see
+
+Own Leave
+
+Own Status
+
+Own History
+
+Employee
+
+Can only see
+
+Own Leave
+
+Own Status
+
+Own History
+
+Admin
+
+Can see
+
+Everyone's Leave
+
+Approve
+
+Reject
+
+Comment
+
+Filter
+
+Search
+
+====================================================
+4. COMPANY LOGO
+====================================================
+
+Replace the circular logo.
+
+Use ONLY the uploaded company logo.
+
+Remove the background circle.
+
+Keep only the logo.
+
+Display it in
+
+Sidebar
+
+Login Page
+
+Top Navbar
+
+Loading Screen
+
+Favicon
+
+Company Header
+
+====================================================
+5. SPRINT DASHBOARD
+====================================================
+
+Current metrics are unrealistic.
+
+Replace with professional enterprise values.
+
+Sprint Progress
+68%
+
+Sprint Velocity
+42 Story Points
+
+Story Completion
+74%
+
+Blocked Stories
+2
+
+Open Bugs
+5
+
+Change Requests
+3
+
+Service Requests
+4
+
+Completed Stories
+28
+
+Remaining Stories
+10
+
+Total Story Points
+112
+
+Burndown Progress
+64%
+
+Team Capacity
+86%
+
+Sprint Health
+Healthy
+
+Remaining Story Points
+34 SP
+
+Display proper progress bars.
+
+Show colors
+
+Green
+
+Amber
+
+Red
+
+====================================================
+6. JIRA STYLE TASK BOARD
+====================================================
+
+Task Columns
+
+To Do
+
+In Progress
+
+Testing
+
+Review
+
+Done
+
+Blocked
+
+Each card should display
+
+Ticket
+
+CC26BUG-001
+
+CC26CR-002
+
+CC26SR-004
+
+CC26EPIC-003
+
+CC26IPM-005
+
+Priority
+
+Story Points
+
+Assignee
+
+Due Date
+
+Comments
+
+Attachment Count
+
+Labels
+
+Progress
+
+====================================================
+7. ACTION MENU
+====================================================
+
+Currently clicking Action does nothing.
+
+When clicking Action show dropdown.
+
+Assign
+
+Edit
+
+Move
+
+Duplicate
+
+Archive
+
+Delete
+
+View Details
+
+Create Subtask
+
+Link Issue
+
+Change Priority
+
+Add Watcher
+
+Add Attachment
+
+====================================================
+8. DASHBOARD CLEANUP
+====================================================
+
+Current dashboard feels crowded.
+
+Reduce unnecessary cards.
+
+Increase spacing.
+
+Use enterprise layout.
+
+Create sections
+
+Overview
+
+Projects
+
+Sprint
+
+Analytics
+
+Notifications
+
+Recent Activities
+
+Upcoming Tasks
+
+Team Performance
+
+Recent Leave Requests
+
+Upcoming Meetings
+
+====================================================
+9. COLORS
+====================================================
+
+Add Theme Settings.
+
+Light
+
+Dark
+
+Blue
+
+Corporate Gray
+
+Emerald
+
+Purple
+
+User should be able to switch manually.
+
+Remember selected theme.
+
+====================================================
+10. CALENDAR
+====================================================
+
+Make Calendar exactly like Google Calendar.
+
+Features
+
+Month
+
+Week
+
+Day
+
+Agenda
+
+Today
+
+Search
+
+Create Event
+
+Recurring Events
+
+Meeting
+
+Sprint
+
+Holiday
+
+Leave
+
+Deadline
+
+Reminder
+
+Color Categories
+
+Drag Drop
+
+Print
+
+Export
+
+====================================================
+11. PROFESSIONAL UI
+====================================================
+
+Make the UI similar to
+
+Jira Software
+
+Azure DevOps
+
+Monday.com
+
+Notion
+
+Linear
+
+Use
+
+Rounded Cards
+
+Professional Shadows
+
+Modern Typography
+
+Status Badges
+
+Icons
+
+Animations
+
+Responsive Layout
+
+Enterprise Design System
+
+====================================================
+12. FINAL REQUIREMENTS
+====================================================
+
+✔ No broken links
+
+✔ No console errors
+
+✔ No TypeScript errors
+
+✔ Responsive
+
+✔ Production Ready
+
+✔ Corporate UI
+
+✔ Working dropdowns
+
+✔ Working sidebar
+
+✔ Working Action menus
+
+✔ Proper access control
+
+✔ Clean layout
+
+✔ Professional spacing
+
+✔ Modern enterprise experience.

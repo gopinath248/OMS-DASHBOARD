@@ -1,0 +1,313 @@
+# Admin Dashboard UI Modification Prompt
+
+Modify the existing Admin Dashboard without changing the current design, theme, authentication, or database structure. Only redesign the sidebar and Sprint Planning section.
+
+## 1. Sidebar Structure
+
+Update the sidebar into the following two main groups.
+
+### 📂 Resource Management
+
+When expanded, display:
+
+* Students
+* Employees
+* Performance
+* Reports
+* Settings
+* Leave Management
+* Notifications
+* Salary Management
+* Calendar
+* Commands
+
+Requirements:
+
+* Use collapsible accordion menu.
+* Each item should have an appropriate icon.
+* Highlight the active page.
+* Add smooth expand/collapse animation.
+* Keep existing routing intact.
+
+---
+
+### 📂 PlanWay
+
+When clicked, open a complete Sprint Planning workspace similar to Jira.
+
+The page should include:
+
+# Current Sprint
+
+Title:
+**Current Sprint**
+
+Sprint Name:
+**Task Management Sprint**
+
+Duration:
+**June 16 – June 30**
+
+Status Badge:
+Active Sprint
+
+Show the sprint as a collapsible card.
+
+Inside the sprint display a Kanban board with drag-and-drop support.
+
+Columns:
+
+1. To Do
+2. In Progress
+3. Testing
+4. Review
+5. Completed
+6. Blocked
+
+Each task card should contain:
+
+* Story ID (TASK-001)
+* Title
+* Priority
+* Assignee Avatar
+* Due Date
+* Labels
+* Progress Indicator
+
+Allow users to drag and drop tasks between columns.
+
+Use smooth animations while dragging.
+
+---
+
+# Next Sprint
+
+Below Current Sprint display:
+
+Title:
+**Next Sprint**
+
+Duration:
+
+**July 1 – July 15**
+
+Status:
+Planned
+
+Display it in a separate collapsible sprint card.
+
+Include placeholder stories for planning.
+
+---
+
+# Previous Sprint
+
+Below Next Sprint display:
+
+Title:
+**Previous Sprint**
+
+Status:
+Completed
+
+Show:
+
+* Completed Tasks
+* Sprint Velocity
+* Completion Percentage
+* Burndown Summary
+* Total Story Points
+
+This section should be read-only.
+
+---
+
+# Sprint Action Toolbar
+
+Below the sprint cards add action buttons:
+
+➕ Add Sprint
+
+➕ Add Story
+
+👁 View Sprint
+
+📅 Calendar
+
+Buttons should have modern icons and hover effects.
+
+---
+
+# Calendar View
+
+When clicking Calendar:
+
+Display a monthly calendar.
+
+Features:
+
+* Sprint Dates
+* Story Due Dates
+* Holidays
+* Leave Days
+* Team Events
+* Meetings
+
+Support month navigation.
+
+---
+
+# Sprint Statistics
+
+Display dashboard cards showing:
+
+Current Sprint Progress
+
+Completed Stories
+
+Pending Stories
+
+Blocked Tasks
+
+Total Story Points
+
+Velocity
+
+Team Capacity
+
+Burn-down Progress
+
+---
+
+# Sprint Filters
+
+Add filters at the top:
+
+Search Stories
+
+Sprint Status
+
+Assignee
+
+Priority
+
+Story Type
+
+Labels
+
+Date Range
+
+---
+
+# Drag and Drop
+
+Support moving tasks between:
+
+To Do
+
+↓
+
+In Progress
+
+↓
+
+Testing
+
+↓
+
+Review
+
+↓
+
+Completed
+
+or
+
+Blocked
+
+Automatically update status after dropping.
+
+Show smooth transition animations.
+
+---
+
+# Story Card UI
+
+Each card should display:
+
+Story ID
+
+Story Title
+
+Assigned Employee
+
+Priority Badge
+
+Estimated Hours
+
+Due Date
+
+Story Points
+
+Comments Count
+
+Attachment Count
+
+Progress Bar
+
+---
+
+# Responsive Design
+
+Desktop:
+Full Kanban Board
+
+Tablet:
+Responsive Columns
+
+Mobile:
+Horizontal Scroll Kanban
+
+---
+
+# Animations
+
+Use Framer Motion (or existing animation library).
+
+Animate:
+
+Sidebar expand/collapse
+
+Sprint open/close
+
+Task drag-and-drop
+
+Button hover
+
+Card hover
+
+Statistics loading
+
+---
+
+# Theme
+
+Do not change existing colors.
+
+Maintain the current dashboard theme.
+
+Use consistent spacing, typography, icons, and card styles.
+
+---
+
+# Technical Requirements
+
+* Preserve existing backend integration.
+* Preserve current routes.
+* Do not remove any existing functionality.
+* Add only the new UI and navigation.
+* Ensure drag-and-drop is fully functional.
+* Components should be modular and reusable.
+* No TypeScript or console errors.
+* Fully responsive.
+* Production-ready UI.
