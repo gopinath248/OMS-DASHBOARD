@@ -39,7 +39,6 @@ const SESSIONS    = ["Forenoon", "Afternoon"];
 
 const EVENT_COLORS: Record<string, string> = {
   Deadline: "bg-red-100 text-red-700 border-red-200",
-  Shift:    "bg-orange-100 text-orange-700 border-orange-200",
   Meeting:  "bg-purple-100 text-purple-700 border-purple-200",
   Leave:    "bg-yellow-100 text-yellow-700 border-yellow-200",
   Event:    "bg-green-100 text-green-700 border-green-200",
@@ -48,7 +47,7 @@ const EVENT_COLORS: Record<string, string> = {
 };
 
 const DOT_COLORS: Record<string, string> = {
-  Deadline: "bg-red-500", Shift: "bg-orange-500", Meeting: "bg-purple-500",
+  Deadline: "bg-red-500", Meeting: "bg-purple-500",
   Leave: "bg-yellow-500", Event: "bg-green-500", Sprint: "bg-blue-500", task: "bg-sky-500",
 };
 
@@ -459,7 +458,7 @@ export default function CalendarPage() {
 
           {/* Navigation */}
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>Month</Button>
+            <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>Today</Button>
             <div className="flex border rounded-lg overflow-hidden">
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => nav(-1)}><ChevronLeft size={15} /></Button>
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => nav(1)}><ChevronRight size={15} /></Button>

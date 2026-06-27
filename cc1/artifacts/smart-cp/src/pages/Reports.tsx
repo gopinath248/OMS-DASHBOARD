@@ -304,7 +304,7 @@ export default function Reports() {
                   <SelectValue placeholder="Dept" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Depts</SelectItem>
+                  <SelectItem value="all">All Designations</SelectItem>
                   {DEPTS.map(d => <SelectItem key={d} value={d.toLowerCase()}>{d}</SelectItem>)}
                 </SelectContent>
               </Select>

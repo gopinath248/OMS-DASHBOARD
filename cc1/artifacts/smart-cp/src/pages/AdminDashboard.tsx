@@ -177,7 +177,7 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Code Core IMS · Jun 25, 2026 · Sprint S01 in progress
+            Code Core IMS · {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · Sprint S01 in progress
           </p>
         </div>
         {unreadCount > 0 && (

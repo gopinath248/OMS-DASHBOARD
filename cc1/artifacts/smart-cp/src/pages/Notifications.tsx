@@ -106,7 +106,7 @@ export default function Notifications() {
   const getTabCount = (tab: FilterTab): number => {
     if (tab === "All") return notifs.filter(n => !n.read).length;
     if (tab === "Unread") return notifs.filter(n => !n.read).length;
-    return notifs.filter(n => getNotifStatus(n) === tab && !n.read).length;
+    return notifs.filter(n => getNotifStatus(n) === tab).length;
   };
 
   return (
