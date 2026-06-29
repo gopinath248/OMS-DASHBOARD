@@ -56,7 +56,7 @@ export default function StudentProfile() {
                   <div className="text-muted-foreground flex items-center gap-2 mt-1">
                     <span className="font-medium text-foreground">{student.id}</span>
                     <span>•</span>
-                    <span>{student.department}</span>
+                    <span>{student.role}</span>
                     <span>•</span>
                     <span>{student.college}</span>
                   </div>

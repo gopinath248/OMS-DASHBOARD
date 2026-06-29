@@ -22,13 +22,13 @@ import { motion } from "framer-motion";
 type Student = typeof initialStudents[0];
 type StudentStatus = "Active" | "Completed" | "Pending";
 
-const DESIGNATIONS = ["CSE", "AI&DS", "IT", "ECE", "EEE"];
+const ROLES = ["Intern", "Trainee", "Employee", "HR", "Manager", "Admin", "Mentor", "Project Lead", "Coordinator"];
 const MENTORS = ["Dr. Smith", "Prof. Davis", "Sarah Lee", "Raj Mehta"];
 const STATUSES: StudentStatus[] = ["Active", "Pending", "Completed"];
 
 const EMPTY_FORM = {
   name: "", email: "", phone: "", college: "",
-  department: "", project: "", mentor: "",
+  role: "", project: "", mentor: "",
   startDate: "", endDate: "", cgpa: "", degree: "B.Tech",
   year: "", gender: "", dob: "", address: "", status: "Active" as StudentStatus,
 };
@@ -89,14 +89,14 @@ export default function StudentManagement() {
     const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           userId.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDept = designationFilter === "all" || s.department === designationFilter;
+    const matchesDept = designationFilter === "all" || s.role === designationFilter;
     return matchesSearch && matchesDept;
   });
 
   const validate = () => {
     const e: Partial<typeof EMPTY_FORM> = {};
     if (!form.name.trim()) e.name = "Name is required.";
-    if (!form.department) e.department = "Designation is required.";
+    if (!form.role) e.role = "Designation is required.";
     if (!form.project.trim()) e.project = "Project is required.";
     if (!form.startDate) e.startDate = "Start date is required.";
     if (!form.endDate) e.endDate = "End date is required.";
@@ -115,7 +115,7 @@ export default function StudentManagement() {
       email: form.email.trim() || `${form.name.toLowerCase().replace(/\s/g, ".")}@corecode.global`,
       phone: form.phone || "—",
       college: form.college || "—",
-      department: form.department,
+      department: form.role,
       project: form.project.trim(),
       mentor: form.mentor || "—",
       startDate: form.startDate,
@@ -158,7 +158,7 @@ export default function StudentManagement() {
     await new Promise(r => setTimeout(r, 500));
     const headers = ["ID", "User ID", "Name", "Designation", "Project", "College", "Mentor", "Start Date", "End Date", "Progress", "Status", "CGPA"];
     const rows = filteredStudents.map(s => [
-      s.id, getUserId(s.name, s.id), s.name, s.department, s.project, s.college,
+      s.id, getUserId(s.name, s.id), s.name, s.role, s.project, s.college,
       s.mentor, s.startDate, s.endDate, s.progress.toString(), s.status, s.cgpa.toString()
     ]);
     downloadCSV(`interns_${new Date().toISOString().slice(0,10)}.csv`, headers, rows);
@@ -171,7 +171,7 @@ export default function StudentManagement() {
     await new Promise(r => setTimeout(r, 400));
     const rows = filteredStudents.map(s => `
       <tr>
-        <td>${s.id}</td><td>${getUserId(s.name, s.id)}</td><td>${s.name}</td><td>${s.department}</td>
+        <td>${s.id}</td><td>${getUserId(s.name, s.id)}</td><td>${s.name}</td><td>${s.role}</td>
         <td>${s.project}</td><td>${s.startDate}</td><td>${s.endDate}</td>
         <td>${s.progress}%</td><td>${s.status}</td>
       </tr>`).join("");
@@ -237,8 +237,8 @@ export default function StudentManagement() {
               </div>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Designation</SelectItem>
-              {DESIGNATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              <SelectItem value="all">All Roles</SelectItem>
+              {ROLES.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -284,7 +284,7 @@ export default function StudentManagement() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="bg-secondary/5 font-normal">{student.department}</Badge>
+                    <Badge variant="outline" className="bg-secondary/5 font-normal">{student.role}</Badge>
                   </TableCell>
                   <TableCell className="text-sm">
                     <Link href={`/projects`} className="hover:text-primary hover:underline cursor-pointer">
@@ -364,12 +364,12 @@ export default function StudentManagement() {
               {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Designation <span className="text-destructive">*</span></Label>
-              <Select value={form.department} onValueChange={v => setForm(p => ({ ...p, department: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                <SelectContent>{DESIGNATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+              <Label>Role <span className="text-destructive">*</span></Label>
+              <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, department: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                <SelectContent>{ROLES.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
               </Select>
-              {errors.department && <p className="text-xs text-destructive">{errors.department}</p>}
+              {errors.role && <p className="text-xs text-destructive">{errors.role}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Project <span className="text-destructive">*</span></Label>
@@ -442,7 +442,7 @@ export default function StudentManagement() {
               </div>
               <div>
                 <span className="text-muted-foreground">Designation:</span>
-                <span className="ml-2">{editStudent.department}</span>
+                <span className="ml-2">{editStudent.role}</span>
               </div>
               <p className="text-xs text-muted-foreground pt-2">Full edit form coming soon.</p>
             </div>

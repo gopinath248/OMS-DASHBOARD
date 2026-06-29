@@ -1,0 +1,316 @@
+Redesign and improve the entire Sprint Planning module to provide a clean, professional Jira-inspired experience while keeping the CoreCode Global PLANWAY branding.
+
+=====================================
+SPRINT PLANNING UI REDESIGN
+=====================================
+
+1. Completely redesign the Sprint Planning page.
+
+2. Remove the current layout where almost every card, sprint, panel, and metric is clickable on one screen.
+
+3. Make Sprint Planning behave like Jira.
+
+When the user clicks "Sprint Planning", open a dedicated page instead of loading everything in one dashboard.
+
+Create top navigation tabs:
+
+• Summary
+• Backlog
+• Board
+• Timeline
+• Reports
+• Documents
+
+Each tab should have its own page/content.
+
+=====================================
+SUMMARY TAB
+=====================================
+
+Display only:
+
+• Sprint Name
+• Sprint Goal
+• Sprint Status
+• Start Date
+• End Date
+• Sprint Progress
+• Total Tasks
+• Completed Tasks
+• Pending Tasks
+• Blocked Tasks
+• Team Capacity
+• Sprint Velocity
+• Recent Activity
+
+Remove unnecessary cards and make the page clean.
+
+=====================================
+BACKLOG
+=====================================
+
+Display tasks in table format.
+
+Columns:
+
+Task ID
+Task Name
+Priority
+Assignee
+Status
+Story Points
+Due Date
+
+Include:
+
+Search
+Filter
+Sort
+Pagination
+
+=====================================
+BOARD
+=====================================
+
+Create a Kanban Board.
+
+Columns:
+
+To Do
+In Progress
+Review
+Testing
+Done
+
+Cards should move only using drag-and-drop.
+
+=====================================
+TIMELINE
+=====================================
+
+Show sprint timeline with milestones and important dates.
+
+=====================================
+REPORTS
+=====================================
+
+Show professional charts for:
+
+Sprint Velocity
+
+Burndown Chart
+
+Task Completion
+
+Story Points
+
+Blocked Tasks
+
+=====================================
+DOCUMENTS
+=====================================
+
+Allow:
+
+Upload
+
+Download
+
+Delete
+
+Search
+
+Preview
+
+=====================================
+UI IMPROVEMENTS
+=====================================
+
+Reduce excessive spacing.
+
+Reduce oversized metric cards.
+
+Improve responsiveness.
+
+Improve typography.
+
+Use rounded cards.
+
+Use subtle animations.
+
+Use blue + white + CoreCode branding.
+
+Improve shadows.
+
+Improve alignment.
+
+=====================================
+REMOVE ENGINEERING DEPARTMENTS
+=====================================
+
+Remove every engineering department everywhere in the application.
+
+Delete:
+
+CSE
+IT
+AIDS
+ECE
+EEE
+MECH
+CIVIL
+MBA
+BCA
+MCA
+
+Replace the Department field with:
+
+Role
+
+Available Roles:
+
+Intern
+
+Trainee
+
+Employee
+
+HR
+
+Manager
+
+Admin
+
+Mentor
+
+Project Lead
+
+Coordinator
+
+Update:
+
+Employee Management
+
+Intern Management
+
+User Profile
+
+Reports
+
+Forms
+
+Filters
+
+Tables
+
+Dashboard
+
+=====================================
+CHANGE CURRENCY
+=====================================
+
+Replace every Dollar ($) symbol with Indian Rupee (₹).
+
+Examples:
+
+$500 → ₹500
+
+$1,250 → ₹1,250
+
+Use Indian currency formatting everywhere.
+
+Update:
+
+Dashboard
+
+Payroll
+
+Salary
+
+Employee Details
+
+Reports
+
+Charts
+
+Exports
+
+PDF
+
+Excel
+
+CSV
+
+=====================================
+RESOURCE MANAGEMENT
+=====================================
+
+Rename:
+
+Resource Management
+
+to
+
+Workforce Management
+
+Create modules:
+
+Employee Directory
+
+Attendance
+
+Leave Management
+
+Payroll
+
+Project Allocation
+
+Performance
+
+Training
+
+Assets
+
+Documents
+
+Reports
+
+Dashboard cards:
+
+Total Employees
+
+Present Today
+
+On Leave
+
+Payroll This Month (₹)
+
+Active Projects
+
+Pending Approvals
+
+New Joiners
+
+Upcoming Birthdays
+
+=====================================
+GENERAL APPLICATION IMPROVEMENTS
+=====================================
+
+Remove all dummy engineering-related data.
+
+Improve loading speed.
+
+Ensure every button performs the correct action.
+
+Fix broken buttons.
+
+Fix navigation.
+
+Improve mobile responsiveness.
+
+Keep a modern enterprise UI.
+
+Do not change the CoreCode Global PLANWAY logo or branding.
+
+The final design should closely resemble Jira's professional layout while maintaining PLANWAY branding, providing a clean, minimal, enterprise-level user experience with proper navigation and functional pages.

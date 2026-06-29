@@ -23,7 +23,7 @@ import { motion } from "framer-motion";
 
 type Staff = typeof initialStaff[0];
 
-const DESIGNATIONS_LIST = ["CSE", "AI&DS", "IT", "ECE", "EEE", "HR"];
+const ROLES_LIST = ["Intern", "Trainee", "Employee", "HR", "Manager", "Admin", "Mentor", "Project Lead", "Coordinator"];
 const STAFF_DESIGNATIONS = [
   "Senior Engineer", "Lead Data Scientist", "Product Manager", "DevOps Lead",
   "ML Research Engineer", "Full Stack Engineer", "HR Coordinator", "Hardware Engineer",
@@ -33,7 +33,7 @@ const STATUSES = ["Active", "On Leave"] as const;
 
 const EMPTY_FORM = {
   name: "", email: "", phone: "", designation: "",
-  department: "", bio: "", status: "Active" as "Active" | "On Leave",
+  role: "", bio: "", status: "Active" as "Active" | "On Leave",
 };
 
 function getEmpUserId(name: string, id: string): string {
@@ -106,7 +106,7 @@ function AssignedInternsDialog({ employee, open, onClose }: { employee: Staff | 
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-muted-foreground pl-1">
                   <div><span className="font-medium text-foreground">Assigned Mentor:</span> {employee.name}</div>
-                  <div><span className="font-medium text-foreground">Designation:</span> {s.department}</div>
+                  <div><span className="font-medium text-foreground">Designation:</span> {s.role}</div>
                   <div><span className="font-medium text-foreground">Assigned Project:</span> {s.project}</div>
                   <div><span className="font-medium text-foreground">Assigned Date:</span> {new Date(s.startDate).toLocaleDateString("en-GB")}</div>
                   <div><span className="font-medium text-foreground">Due Date:</span> {new Date(s.endDate).toLocaleDateString("en-GB")}</div>
@@ -142,7 +142,7 @@ export default function StaffManagement() {
   const filteredStaff = staffList.filter(s => {
     const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           s.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDept = designationFilter === "all" || s.department === designationFilter;
+    const matchesDept = designationFilter === "all" || s.role === designationFilter;
     return matchesSearch && matchesDept;
   });
 
@@ -150,7 +150,7 @@ export default function StaffManagement() {
     const e: Partial<typeof EMPTY_FORM> = {};
     if (!form.name.trim()) e.name = "Name is required.";
     if (!form.designation) e.designation = "Designation is required.";
-    if (!form.department) e.department = "Department is required.";
+    if (!form.role) e.role = "Role is required.";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -165,7 +165,7 @@ export default function StaffManagement() {
       email: form.email.trim() || `${form.name.toLowerCase().replace(/\s/g, ".")}@corecode.global`,
       phone: form.phone || "—",
       designation: form.designation,
-      department: form.department,
+      role: form.role,
       bio: form.bio.trim() || "—",
       status: form.status,
       assignedInterns: [],
@@ -269,8 +269,8 @@ export default function StaffManagement() {
               </div>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Designation</SelectItem>
-              {DESIGNATIONS_LIST.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              <SelectItem value="all">All Roles</SelectItem>
+              {ROLES_LIST.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -419,12 +419,12 @@ export default function StaffManagement() {
               {errors.designation && <p className="text-xs text-destructive">{errors.designation}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Department <span className="text-destructive">*</span></Label>
-              <Select value={form.department} onValueChange={v => setForm(p => ({ ...p, department: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                <SelectContent>{DESIGNATIONS_LIST.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+              <Label>Role <span className="text-destructive">*</span></Label>
+              <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                <SelectContent>{ROLES_LIST.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
               </Select>
-              {errors.department && <p className="text-xs text-destructive">{errors.department}</p>}
+              {errors.role && <p className="text-xs text-destructive">{errors.role}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Phone</Label>

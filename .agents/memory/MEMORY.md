@@ -1,0 +1,2 @@
+- [PlanWay Jira Rewrite](planway-jira.md) — full 6-tab Jira-style rewrite; INT/EMP lines conflict in perl replacements if assignedInterns contains INT IDs
+- [Roles Refactor](roles-refactor.md) — departments (CSE/AI&DS/ECE/IT/EEE) replaced with Role field; students=Intern/Trainee, staff=Mentor/ProjectLead/Manager/HR/Employee/Coordinator

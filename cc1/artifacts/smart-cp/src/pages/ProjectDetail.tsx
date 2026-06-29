@@ -387,7 +387,7 @@ export default function ProjectDetail() {
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{s.name}</p>
                           <div className="flex items-center gap-1.5">
-                            <p className="text-xs text-muted-foreground truncate">{s.department}</p>
+                            <p className="text-xs text-muted-foreground truncate">{s.role}</p>
                             <div className="w-1 h-1 rounded-full bg-muted-foreground/40" />
                             <span className={`text-[10px] font-medium ${s.progress >= 80 ? "text-green-600" : s.progress >= 50 ? "text-yellow-600" : "text-red-500"}`}>
                               {s.progress}%

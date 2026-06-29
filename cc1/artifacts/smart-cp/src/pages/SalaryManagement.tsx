@@ -98,7 +98,7 @@ function PayslipDialog({ employee, open, onClose }: {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Department</span>
-              <span className="font-semibold">{employee.department}</span>
+              <span className="font-semibold">{employee.role}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Pay Month</span>
@@ -183,7 +183,7 @@ export default function SalaryManagement() {
   const filtered = PAYROLL
     .filter(p =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.department.toLowerCase().includes(search.toLowerCase()) ||
+      p.role.toLowerCase().includes(search.toLowerCase()) ||
       p.designation.toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => sortAsc ? a.base - b.base : b.base - a.base);

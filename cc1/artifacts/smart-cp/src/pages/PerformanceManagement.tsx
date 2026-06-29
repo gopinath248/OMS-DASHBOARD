@@ -81,7 +81,7 @@ export default function PerformanceManagement() {
             <SelectContent>
               {students.map(s => (
                 <SelectItem key={s.id} value={s.id}>
-                  {s.name} — {s.department}
+                  {s.name} — {s.role}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -104,8 +104,8 @@ export default function PerformanceManagement() {
             </div>
             <div className="flex flex-wrap gap-4 text-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Designation</p>
-                <p className="font-semibold">{student.department}</p>
+                <p className="text-xs text-muted-foreground">Role</p>
+                <p className="font-semibold">{student.role}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Rating</p>

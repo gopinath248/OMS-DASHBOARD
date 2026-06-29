@@ -116,9 +116,9 @@ export default function AdminDashboard() {
     { name: "May", value: 96, target: 94 }, { name: "Jun", value: avgAttendance, target: 94 },
   ];
 
-  const depts = ["CSE", "AI&DS", "IT", "ECE", "EEE"];
-  const departmentData = depts.map(dept => ({
-    name: dept, value: students.filter(s => s.department === dept).length,
+  const roles = ["Intern", "Trainee"];
+  const departmentData = roles.map(role => ({
+    name: role, value: students.filter(s => s.role === role).length,
   })).filter(d => d.value > 0);
 
   const perfOverview = [

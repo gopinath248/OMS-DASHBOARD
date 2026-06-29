@@ -63,7 +63,7 @@ export default function StaffProfile() {
                 </div>
                 <div className="flex items-center gap-3 text-sm">
                   <Users className="text-muted-foreground h-4 w-4 shrink-0" />
-                  <span>{staffMember.department} Department</span>
+                  <span>{staffMember.role}</span>
                 </div>
               </div>
               

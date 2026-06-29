@@ -14,13 +14,13 @@ import { students, staff, leaveRequests, tasks, performanceData } from "@/data/m
 import { useToast } from "@/hooks/use-toast";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
-const DEPTS = ["CSE", "AI&DS", "IT", "ECE", "EEE"];
+const ROLES = ["Intern", "Trainee"];
 
 function getReportData(type: string) {
   switch (type) {
     case "attendance": {
-      const data = DEPTS.map(dept => {
-        const deptStudents = students.filter(s => s.department === dept);
+      const data = ROLES.map(dept => {
+        const deptStudents = students.filter(s => s.role === dept);
         if (!deptStudents.length) return null;
         const ids = deptStudents.map(s => s.id);
         const perf = performanceData.filter(p => ids.includes(p.internId));
@@ -29,11 +29,11 @@ function getReportData(type: string) {
       }).filter(Boolean) as { name: string; value: number }[];
       const avg = data.length ? Math.round(data.reduce((s, d) => s + d.value, 0) / data.length) : 0;
       const best = data.length ? data.reduce((a, b) => a.value > b.value ? a : b) : { name: "N/A" };
-      return { data, summary: { total: students.length, avg: `${avg}%`, best: `${best.name} Dept`, trend: "+1%" } };
+      return { data, summary: { total: students.length, avg: `${avg}%`, best: `${best.name}`, trend: "+1%" } };
     }
     case "performance": {
-      const data = DEPTS.map(dept => {
-        const deptStudents = students.filter(s => s.department === dept);
+      const data = ROLES.map(dept => {
+        const deptStudents = students.filter(s => s.role === dept);
         if (!deptStudents.length) return null;
         const ids = deptStudents.map(s => s.id);
         const perf = performanceData.filter(p => ids.includes(p.internId));
@@ -42,7 +42,7 @@ function getReportData(type: string) {
       }).filter(Boolean) as { name: string; value: number }[];
       const avg = data.length ? Math.round(data.reduce((s, d) => s + d.value, 0) / data.length) : 0;
       const best = data.length ? data.reduce((a, b) => a.value > b.value ? a : b) : { name: "N/A" };
-      return { data, summary: { total: students.length, avg: `${avg}%`, best: `${best.name} Dept`, trend: "+4%" } };
+      return { data, summary: { total: students.length, avg: `${avg}%`, best: `${best.name}`, trend: "+4%" } };
     }
     case "leave": {
       const types = ["Casual", "Sick", "Personal", "Emergency"];
@@ -85,9 +85,9 @@ function getReportData(type: string) {
       };
     }
     case "completion": {
-      const data = DEPTS.map(dept => ({
+      const data = ROLES.map(dept => ({
         name: dept,
-        value: students.filter(s => s.department === dept && s.status === "Completed").length,
+        value: students.filter(s => s.role === dept && s.status === "Completed").length,
       })).filter(d => d.value > 0);
       const completed = students.filter(s => s.status === "Completed").length;
       return {
