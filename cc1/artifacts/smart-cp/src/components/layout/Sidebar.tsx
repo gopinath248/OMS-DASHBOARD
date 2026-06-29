@@ -100,23 +100,33 @@ function NavLink({ href, label, icon: Icon, active, collapsed }: {
 }
 
 function AccordionGroup({
-  label, icon: Icon, open, onToggle, collapsed, children,
+  label, icon: Icon, open, onToggle, collapsed, children, gold,
 }: {
   label: string; icon: React.ElementType; open: boolean;
-  onToggle: () => void; collapsed: boolean; children: React.ReactNode;
+  onToggle: () => void; collapsed: boolean; children: React.ReactNode; gold?: boolean;
 }) {
   const trigger = (
     <button
       onClick={onToggle}
       className={cn(
         "w-full flex items-center gap-2 rounded-md transition-colors",
-        "text-secondary-foreground/50 hover:text-secondary-foreground/80 hover:bg-secondary-foreground/10",
+        "hover:bg-secondary-foreground/10",
+        gold
+          ? "text-[#D4AF37]/80 hover:text-[#D4AF37]"
+          : "text-secondary-foreground/50 hover:text-secondary-foreground/80",
         collapsed ? "justify-center p-2.5" : "px-2.5 py-2 justify-between"
       )}
     >
       <div className="flex items-center gap-2">
         <Icon size={13} className="shrink-0" />
-        {!collapsed && <span className="text-[10px] font-bold uppercase tracking-widest">{label}</span>}
+        {!collapsed && (
+          <span
+            className="text-[10px] font-bold uppercase tracking-widest"
+            style={gold ? { color: "#D4AF37" } : undefined}
+          >
+            {label}
+          </span>
+        )}
       </div>
       {!collapsed && (
         <motion.div animate={{ rotate: open ? 0 : -90 }} transition={{ duration: 0.2 }}>
@@ -253,6 +263,7 @@ export function Sidebar({ collapsed, setCollapsed, role }: SidebarProps) {
                 open={effectivePlanwayOpen}
                 onToggle={togglePlanyway}
                 collapsed={collapsed}
+                gold
               >
                 {PLANYWAY_LINKS.map(l => (
                   <NavLink key={l.label} {...l} active={isActive(l.href)} collapsed={collapsed} />
