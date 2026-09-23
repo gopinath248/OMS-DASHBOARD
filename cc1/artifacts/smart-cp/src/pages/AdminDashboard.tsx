@@ -3,7 +3,8 @@ import {
   Users, GraduationCap, Briefcase, ClipboardList,
   CalendarDays, CheckCircle2, TrendingUp, TrendingDown,
   Mail, MailOpen, ArrowRight, Clock, Activity,
-  AlertTriangle, Star, Zap, Target,
+  AlertTriangle, Star, Zap, Target, BarChart3,
+  Download,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -13,13 +14,14 @@ import {
 import { motion } from "framer-motion";
 import { students, staff, leaveRequests, tasks, performanceData, notifications, projects, projectDocuments } from "@/data/mockData";
 import { Link } from "wouter";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { markAllNotificationsRead, markNotificationRead } from "@/lib/api";
 
 const COLORS = [
   "hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))",
@@ -32,9 +34,28 @@ interface Message {
 }
 
 const CATEGORY_SENDER: Record<string, string> = {
-  Leave: "Leave System", Task: "Task Manager",
+  Leave: "Leave System", Task: "Task manager",
   Performance: "HR Team", System: "System Admin", General: "Admin Office",
 };
+
+function escapeHtml(value: string | number) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function downloadHtmlReport(filename: string, html: string) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 function buildMessages(): Message[] {
   return notifications.map(n => ({
@@ -79,10 +100,21 @@ function KpiCard({ title, value, trend, trendVal, icon: Icon, color, bg, delay }
 export default function AdminDashboard() {
   const [messages, setMessages] = useState<Message[]>(buildMessages);
   const [messagesOpen, setMessagesOpen] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
 
   const unreadCount   = messages.filter(m => !m.read).length;
-  const markRead      = (id: string) => setMessages(prev => prev.map(m => m.id === id ? { ...m, read: true } : m));
-  const markAllRead   = () => setMessages(prev => prev.map(m => ({ ...m, read: true })));
+  const markRead      = (id: string) => {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, read: true } : m));
+    markNotificationRead(id).catch(error => console.error("Unable to persist notification read state.", error));
+  };
+  const markAllRead   = () => {
+    setMessages(prev => prev.map(m => ({ ...m, read: true })));
+    markAllNotificationsRead().catch(error => console.error("Unable to persist notification read state.", error));
+  };
+  const openMessage   = (message: Message) => {
+    setSelectedMessage(message);
+    markRead(message.id);
+  };
 
   // Metrics
   const activeInterns   = students.filter(s => s.status === "Active").length;
@@ -109,6 +141,13 @@ export default function AdminDashboard() {
     { title: "Documents",         value: projectDocuments.length.toString(), trendVal: "+5", trend: "up" as const, icon: Activity,     color: "text-teal-600",   bg: "bg-teal-50",   delay: 0.35 },
   ];
 
+  const featureCards = [
+    { title: "Sprint Planning", icon: Zap, color: "text-blue-600", bg: "bg-blue-50", delay: 0 },
+    { title: "Resource Management", icon: Users, color: "text-green-600", bg: "bg-green-50", delay: 0.05 },
+    { title: "Analytics & Reports", icon: BarChart3, color: "text-violet-600", bg: "bg-violet-50", delay: 0.1 },
+    { title: "Enterprise Security", icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50", delay: 0.15 },
+  ];
+
   // Chart data
   const attendanceData = [
     { name: "Jan", value: 90, target: 92 }, { name: "Feb", value: 92, target: 92 },
@@ -116,7 +155,7 @@ export default function AdminDashboard() {
     { name: "May", value: 96, target: 94 }, { name: "Jun", value: avgAttendance, target: 94 },
   ];
 
-  const roles = ["Intern", "Trainee"];
+  const roles = ["Intern"];
   const departmentData = roles.map(role => ({
     name: role, value: students.filter(s => s.role === role).length,
   })).filter(d => d.value > 0);
@@ -140,7 +179,7 @@ export default function AdminDashboard() {
     { user: students[0]?.name ?? "Alice Johnson", action: "submitted task completion report", time: "2h ago",   type: "task" },
     { user: staff[0]?.name ?? "Dr. Smith",         action: "approved leave request for INT003", time: "3h ago",   type: "leave" },
     { user: students[1]?.name ?? "Bob Smith",      action: "updated Healthcare AI project milestone", time: "5h ago",   type: "project" },
-    { user: students[2]?.name ?? "Charlie Brown",  action: "completed internship program",       time: "1 day ago", type: "complete" },
+    { user: students[2]?.name ?? "Charlie Brown",  action: "completed Internship program",       time: "1 day ago", type: "complete" },
     { user: staff[1]?.name ?? "Prof. Davis",       action: "reviewed Q2 performance report",    time: "2 days ago", type: "perf" },
   ];
 
@@ -169,6 +208,121 @@ export default function AdminDashboard() {
     burndown: 64, teamCapacity: 86, remainingSP: 34,
   };
 
+  const handleGenerateAdminReport = () => {
+    const reportDate = new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    const taskStatus = ["To Do", "In Progress", "Testing", "Review", "Blocked", "Done", "Completed"]
+      .map(status => ({
+        status,
+        count: tasks.filter(task => task.status === status).length,
+      }))
+      .filter(item => item.count > 0);
+    const projectStatus = ["Planning", "Active", "On Hold", "Completed", "Cancelled"]
+      .map(status => ({
+        status,
+        count: projects.filter(project => project.status === status).length,
+      }))
+      .filter(item => item.count > 0);
+    const topPerformers = performanceData
+      .map(perf => {
+        const student = students.find(item => item.id === perf.internId);
+        const score = Math.round((perf.attendance + perf.taskCompletion + perf.communication + perf.discipline + perf.learning + perf.innovation + perf.leadership + perf.collaboration) / 8);
+        return { name: student?.name ?? perf.internId, score, attendance: perf.attendance, taskCompletion: perf.taskCompletion };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+    const makeRows = (rows: Array<Array<string | number>>) => rows
+      .map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
+      .join("");
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>CODE CORE PLANYWAY Admin Report</title>
+  <style>
+    body{font-family:Arial,sans-serif;color:#111827;margin:0;padding:28px;background:#f8fafc}
+    .sheet{max-width:1100px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:28px;position:relative;overflow:hidden}
+    .sheet:before{content:"CODE CORE";position:absolute;right:22px;bottom:18px;font-size:82px;font-weight:900;color:#0f2f6e;opacity:.045;z-index:0}
+    .content{position:relative;z-index:1}
+    .brand{display:flex;align-items:center;gap:14px;border-bottom:3px solid #d4af37;padding-bottom:16px;margin-bottom:22px}
+    .logo{width:58px;height:58px;border-radius:15px;background:#0f2f6e;color:#d4af37;display:flex;align-items:center;justify-content:center;font-weight:900;letter-spacing:1px}
+    h1{margin:0;font-size:24px} h2{font-size:16px;margin:28px 0 10px}
+    .muted{color:#64748b;font-size:12px;margin-top:6px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}
+    .metric{border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#f9fafb}.metric span{display:block;color:#64748b;font-size:11px;text-transform:uppercase}.metric strong{display:block;font-size:22px;margin-top:6px}
+    table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #e5e7eb;padding:8px 10px;text-align:left;vertical-align:top}th{background:#f1f5f9;font-weight:700}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}.note{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;font-size:12px;color:#1e3a8a;margin-top:18px}
+    @media print{body{background:#fff;padding:0}.sheet{border:0;border-radius:0}.no-print{display:none}}
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="content">
+    <div class="brand"><div class="logo">CC</div><div><h1>CODE CORE PLANYWAY Admin Dashboard Report</h1><div class="muted">Generated on ${escapeHtml(reportDate)} from current dashboard data</div></div></div>
+    <div class="grid">
+      <div class="metric"><span>Total Interns</span><strong>${students.length}</strong></div>
+      <div class="metric"><span>Active Employees</span><strong>${activeEmployees}</strong></div>
+      <div class="metric"><span>Active Interns</span><strong>${activeInterns}</strong></div>
+      <div class="metric"><span>Pending Tasks</span><strong>${pendingTasks}</strong></div>
+      <div class="metric"><span>Pending Leaves</span><strong>${pendingLeaves}</strong></div>
+      <div class="metric"><span>Completion Rate</span><strong>${completionRate}%</strong></div>
+      <div class="metric"><span>Average Attendance</span><strong>${avgAttendance}%</strong></div>
+      <div class="metric"><span>Average Performance</span><strong>${avgPerf}%</strong></div>
+    </div>
+
+    <h2>Sprint Health</h2>
+    <table><tbody>${makeRows([
+      ["Sprint Progress", `${SPRINT.progress}%`, "Velocity", `${SPRINT.velocity} SP`],
+      ["Story Completion", `${SPRINT.storyCompletion}%`, "Blocked Stories", SPRINT.blocked],
+      ["Open Bugs", SPRINT.openBugs, "Team Capacity", `${SPRINT.teamCapacity}%`],
+      ["Completed Stories", SPRINT.completedStories, "Remaining Story Points", `${SPRINT.remainingSP} SP`],
+    ])}</tbody></table>
+
+    <div class="two">
+      <div>
+        <h2>Task Status</h2>
+        <table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody>${makeRows(taskStatus.map(item => [item.status, item.count]))}</tbody></table>
+      </div>
+      <div>
+        <h2>Project Status</h2>
+        <table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody>${makeRows(projectStatus.map(item => [item.status, item.count]))}</tbody></table>
+      </div>
+    </div>
+
+    <h2>Top Performance Results</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Overall Score</th><th>Attendance</th><th>Task Completion</th></tr></thead>
+      <tbody>${makeRows(topPerformers.map(item => [item.name, `${item.score}%`, `${item.attendance}%`, `${item.taskCompletion}%`]))}</tbody>
+    </table>
+
+    <h2>Upcoming Tasks</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Assigned To</th><th>Priority</th><th>Due Date</th><th>Status</th></tr></thead>
+      <tbody>${makeRows(upcomingTasks.map(task => [task.title, task.assignedTo, task.priority, task.dueDate, task.status]))}</tbody>
+    </table>
+
+    <h2>Pending Leave Requests</h2>
+    <table>
+      <thead><tr><th>Intern</th><th>Type</th><th>Duration</th><th>Reason</th><th>Status</th></tr></thead>
+      <tbody>${pendingLeaveList.length ? makeRows(pendingLeaveList.map(leave => [leave.internName, leave.type, `${leave.duration} day${leave.duration !== 1 ? "s" : ""}`, leave.reason, leave.status])) : makeRows([["No pending requests", "-", "-", "-", "-"]])}</tbody>
+    </table>
+
+    <h2>Document Summary</h2>
+    <table><tbody>${makeRows([
+      ["Total Documents", projectDocuments.length, "Total Projects", projects.length],
+      ["Latest Document", projectDocuments[projectDocuments.length - 1]?.title ?? "No documents", "Uploaded By", projectDocuments[projectDocuments.length - 1]?.uploadedBy ?? "-"],
+    ])}</tbody></table>
+    <div class="note">This report is generated locally for testing from the current dummy data/state. Open this HTML file in the browser and use Ctrl+P to save it as PDF.</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    downloadHtmlReport(`admin_dashboard_report_${new Date().toISOString().slice(0, 10)}.html`, html);
+  };
+
   return (
     <div className="space-y-7 pb-8">
 
@@ -177,24 +331,40 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Code Core IMS · {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · Sprint S01 in progress
+            CODE CORE PLANYWAY - {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
           </p>
         </div>
-        {unreadCount > 0 && (
-          <Button onClick={() => setMessagesOpen(true)} className="bg-destructive hover:bg-destructive/90 text-white gap-2">
-            <Mail size={15} /> {unreadCount} unread
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleGenerateAdminReport} className="gap-2">
+            <Download size={15} /> Generate Report
           </Button>
-        )}
+          {unreadCount > 0 && (
+            <Button onClick={() => setMessagesOpen(true)} className="bg-destructive hover:bg-destructive/90 text-white gap-2">
+              <Mail size={15} /> {unreadCount} unread
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ── SECTION 1: KPIs ─────────────────────────── */}
       <section>
         <div className="flex items-center gap-2 mb-3">
           <Activity size={15} className="text-muted-foreground" />
-          <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Overview</h2>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">PLANYWAY Modules</h2>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {kpis.map(k => <KpiCard key={k.title} {...k} />)}
+          {featureCards.map(({ title, icon: Icon, color, bg, delay }) => (
+            <motion.div key={title} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}>
+              <Card className="hover:shadow-md transition-all hover:-translate-y-0.5 border">
+                <CardContent className="p-5">
+                  <div className={cn("mb-4 inline-flex p-2.5 rounded-xl", bg, color)}>
+                    <Icon size={18} />
+                  </div>
+                  <h3 className="text-base font-bold">{title}</h3>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
         </div>
       </section>
 
@@ -247,7 +417,7 @@ export default function AdminDashboard() {
                     <Pie data={departmentData} cx="50%" cy="50%" innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="value">
                       {departmentData.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", fontSize: 12 }} formatter={(v, n) => [`${v} interns`, n]} />
+                    <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", fontSize: 12 }} formatter={(v, n) => [`${v} Interns`, n]} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -320,7 +490,7 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Zap size={15} className="text-muted-foreground" />
-            <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Sprint S01 — Jun 16–30, 2026</h2>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Sprint Health</h2>
           </div>
           <Link href="/planway">
             <Button variant="ghost" size="sm" className="text-xs gap-1 h-7">
@@ -494,6 +664,7 @@ export default function AdminDashboard() {
               ) : pendingLeaveList.map(l => (
                 <div key={l.id} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/40 transition-colors border-b last:border-0">
                   <Avatar className="h-7 w-7 shrink-0">
+                    {l.avatarUrl && <AvatarImage src={l.avatarUrl} alt={l.internName} />}
                     <AvatarFallback className="text-[9px] bg-orange-100 text-orange-700 font-bold">
                       {l.internName.split(" ").map((n: string) => n[0]).join("").substring(0, 2)}
                     </AvatarFallback>
@@ -526,10 +697,15 @@ export default function AdminDashboard() {
               )}
             </div>
           </DialogHeader>
-          <ScrollArea className="flex-1 -mx-6 px-6">
+          <ScrollArea className="h-[60vh] -mx-6 px-6">
             <div className="space-y-2 py-2">
               {messages.map(msg => (
-                <div key={msg.id} className={cn("p-4 border rounded-xl transition-colors", !msg.read ? "bg-blue-50/60 border-blue-100" : "bg-card")}>
+                <button
+                  key={msg.id}
+                  type="button"
+                  onClick={() => openMessage(msg)}
+                  className={cn("w-full p-4 border rounded-xl transition-colors text-left hover:bg-muted/30", !msg.read ? "bg-blue-50/60 border-blue-100" : "bg-card")}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0">
                       <div className={cn("w-2 h-2 rounded-full mt-2 shrink-0", !msg.read ? "bg-blue-500" : "bg-transparent")} />
@@ -544,15 +720,35 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     {!msg.read && (
-                      <Button size="sm" variant="outline" className="text-xs shrink-0 gap-1 h-7" onClick={() => markRead(msg.id)}>
+                      <Button size="sm" variant="outline" className="text-xs shrink-0 gap-1 h-7" onClick={event => { event.stopPropagation(); markRead(msg.id); }}>
                         <MailOpen size={12} /> Mark read
                       </Button>
                     )}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedMessage} onOpenChange={open => !open && setSelectedMessage(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{selectedMessage?.subject}</DialogTitle>
+          </DialogHeader>
+          {selectedMessage && (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{selectedMessage.category}</Badge>
+                <span className="text-xs text-muted-foreground">{selectedMessage.sender}</span>
+                <span className="text-xs text-muted-foreground">{selectedMessage.dateTime}</span>
+              </div>
+              <p className="leading-relaxed text-muted-foreground whitespace-pre-line">
+                {selectedMessage.preview}
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

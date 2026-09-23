@@ -180,7 +180,11 @@ router.get("/dms/documents/:id/file", requireDmsAuth, async (req, res): Promise<
     return;
   }
 
-  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(doc.fileName)}"`);
+  const fallbackFileName = doc.fileName.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${fallbackFileName}"; filename*=UTF-8''${encodeURIComponent(doc.fileName)}`,
+  );
   res.sendFile(filePath);
 });
 

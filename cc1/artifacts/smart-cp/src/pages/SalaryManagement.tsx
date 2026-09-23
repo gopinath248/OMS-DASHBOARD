@@ -1,264 +1,499 @@
-import { useState } from "react";
-import { IndianRupee, TrendingUp, Users, Clock, Search, Download, ChevronDown, ChevronUp } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  Calculator,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  IndianRupee,
+  Search,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { staff } from "@/data/mockData";
+import { useToast } from "@/hooks/use-toast";
+import { getAuthSession } from "@/lib/auth";
 import { motion } from "framer-motion";
 
-/* ─── Indian currency helpers ─────────────────────────────── */
-function inr(amount: number, opts?: { compact?: boolean }): string {
-  if (opts?.compact) {
-    if (amount >= 1_00_00_000) return `₹${(amount / 1_00_00_000).toFixed(2)}Cr`;
-    if (amount >= 1_00_000)    return `₹${(amount / 1_00_000).toFixed(2)}L`;
-    if (amount >= 1_000)       return `₹${(amount / 1_000).toFixed(0)}K`;
-  }
-  return "₹" + new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(amount);
-}
-
-/* ─── Salary data ─────────────────────────────────────────── */
-const SALARY_BASE: Record<string, number> = {
-  "Senior Engineer":       95000,
-  "Lead Data Scientist":  105000,
-  "Product Manager":       90000,
-  "DevOps Lead":           98000,
-  "ML Research Engineer": 102000,
-  "Full Stack Engineer":   85000,
-  "HR Coordinator":        72000,
-  "Hardware Engineer":     80000,
-  "Power Systems Expert":  88000,
-  "Security Engineer":     92000,
+type SalaryRecord = {
+  id: string;
+  source: string;
+  userId: string | null;
+  name: string;
+  email: string;
+  avatarUrl?: string | null;
+  department: string;
+  designation: string;
+  role: string;
+  status: string;
+  monthlySalary: number;
+  grossSalary: number;
+  netSalary: number;
+  leaveDeduction: number;
+  paidLeaveDays: number;
+  unpaidLeaveDays: number;
+  assignment: { exists: boolean; id?: number; assignedAt?: string; netSalary?: number };
 };
 
-/* Component breakdown for payslip */
-function getComponents(base: number) {
-  const hra       = Math.round(base * 0.4);
-  const travel    = Math.round(base * 0.08);
-  const medical   = Math.round(base * 0.05);
-  const bonus     = Math.round(base * 0.12);
-  const pf        = Math.round(base * 0.12);
-  const profTax   = 200;
-  const gross     = base + hra + travel + medical + bonus;
-  const deductions= pf + profTax;
-  const net       = gross - deductions;
-  return { hra, travel, medical, bonus, pf, profTax, gross, deductions, net };
+type SalaryCalculation = {
+  employee: SalaryRecord;
+  month: string;
+  monthLabel: string;
+  payMonth: string;
+  salary: {
+    monthlySalary: number;
+    hra: number;
+    travel: number;
+    medical: number;
+    bonus: number;
+    grossSalary: number;
+    dailyRate: number;
+    providentFund: number;
+    professionalTax: number;
+    leaveDeduction: number;
+    totalDeductions: number;
+    netSalary: number;
+  };
+  attendance: {
+    source: string;
+    calendarDays: number;
+    weeklyOffs: number;
+    companyHolidays: number;
+    workingDays: number;
+    presentDays: number;
+    absentDays: number;
+    holidayDates: string[];
+    weeklyOffDates: string[];
+  };
+  leave: {
+    summary: Array<{ type: string; days: number; paid: boolean }>;
+    totalLeaveDays: number;
+    paidLeaveDays: number;
+    unpaidLeaveDays: number;
+    duplicateHandling: string;
+    unknownLeavePaid: boolean;
+  };
+  assignment: { exists: boolean; id?: number; assignedAt?: string; netSalary?: number };
+};
+
+type DashboardResponse = {
+  month: string;
+  records: SalaryRecord[];
+  summary: {
+    employeeCount: number;
+    totalMonthlySalary: number;
+    avgMonthlySalary: number;
+    assignedCount: number;
+    pendingCount: number;
+  };
+};
+
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
 }
 
-const PAYROLL = staff.map(s => ({
-  ...s,
-  base:     SALARY_BASE[s.designation] ?? 80000,
-  paid:     s.status === "Active",
-  lastPaid: "2026-05-31",
-  nextPay:  "2026-06-30",
-}));
+async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  const session = getAuthSession();
+  if (session) headers.set("Authorization", `Bearer ${session.token}`);
 
-const totalAnnualPayroll = PAYROLL.reduce((a, b) => a + b.base, 0);
-const totalMonthly       = Math.round(totalAnnualPayroll / 12);
-const avgMonthly         = Math.round(totalMonthly / PAYROLL.length);
-const paidCount          = PAYROLL.filter(p => p.paid).length;
+  const response = await fetch(path, {
+    ...init,
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.error ?? "Request failed") as Error & { status?: number; data?: unknown };
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
+  return data as T;
+}
 
-/* ─── Payslip Dialog ──────────────────────────────────────── */
-function PayslipDialog({ employee, open, onClose }: {
-  employee: typeof PAYROLL[0] | null; open: boolean; onClose: () => void;
+function inr(amount: number): string {
+  return "\u20b9" + new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function csvEscape(value: string | number): string {
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadTextFile(filename: string, content: string, type = "text/csv;charset=utf-8") {
+  const blobParts = type.toLowerCase().includes("text/csv") ? ["\uFEFF", content] : [content];
+  const blob = new Blob(blobParts, { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function defaultLeaveRows(calculation: SalaryCalculation | null) {
+  const known = ["Sick Leave", "Personal Leave", "Emergency Leave", "Casual Leave"];
+  const rows = new Map(known.map((type) => [type, { type, days: 0, paid: false }]));
+  for (const item of calculation?.leave.summary ?? []) rows.set(item.type, item);
+  const otherDays = [...rows.values()]
+    .filter((item) => !known.includes(item.type))
+    .reduce((sum, item) => sum + item.days, 0);
+  return [
+    ...known.map((type) => rows.get(type)!),
+    { type: "Other Leave", days: otherDays, paid: calculation?.leave.unknownLeavePaid ?? false },
+  ];
+}
+
+function Row({ label, value, strong }: { label: string; value: string | number; strong?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={strong ? "font-bold tabular-nums" : "font-medium tabular-nums"}>{value}</span>
+    </div>
+  );
+}
+
+function SalaryCalculationDialog({
+  open,
+  records,
+  month,
+  initialEmployeeId,
+  onClose,
+  onAssigned,
+}: {
+  open: boolean;
+  records: SalaryRecord[];
+  month: string;
+  initialEmployeeId: string;
+  onClose: () => void;
+  onAssigned: () => void;
 }) {
-  if (!employee) return null;
-  const monthly = Math.round(employee.base / 12);
-  const c = getComponents(monthly);
+  const { toast } = useToast();
+  const [employeeId, setEmployeeId] = useState(initialEmployeeId);
+  const [calculation, setCalculation] = useState<SalaryCalculation | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [existingSalary, setExistingSalary] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setEmployeeId(initialEmployeeId || records[0]?.id || "");
+    setCalculation(null);
+    setExistingSalary(false);
+  }, [initialEmployeeId, open, records]);
+
+  const selected = records.find((record) => record.id === employeeId);
+
+  const calculate = async () => {
+    if (!employeeId) return;
+    setLoading(true);
+    setExistingSalary(false);
+    try {
+      const result = await apiJson<SalaryCalculation>(`/api/salary/calculation/${encodeURIComponent(employeeId)}?month=${month}`);
+      setCalculation(result);
+      setExistingSalary(Boolean(result.assignment.exists));
+    } catch (error) {
+      toast({ title: "Salary calculation failed", description: error instanceof Error ? error.message : "Unable to calculate salary.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const assign = async (updateExisting = false) => {
+    if (!employeeId) return;
+    setAssigning(true);
+    try {
+      const result = await apiJson<{ calculation: SalaryCalculation }>("/api/salary/assign", {
+        method: "POST",
+        body: JSON.stringify({ employeeId, month, updateExisting }),
+      });
+      setCalculation(result.calculation);
+      setExistingSalary(false);
+      onAssigned();
+      toast({ title: updateExisting ? "Salary Updated" : "Salary Assigned", description: "The salary record was saved in smart_cp." });
+    } catch (error) {
+      const maybe = error as Error & { status?: number; data?: { calculation?: SalaryCalculation } };
+      if (maybe.status === 409) {
+        setExistingSalary(true);
+        if (maybe.data?.calculation) setCalculation(maybe.data.calculation);
+        toast({ title: "Existing Salary Found", description: "Review the calculation and choose Update if you want to replace the existing monthly record." });
+      } else {
+        toast({ title: "Salary assignment failed", description: error instanceof Error ? error.message : "Unable to assign salary.", variant: "destructive" });
+      }
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const leaveRows = defaultLeaveRows(calculation);
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <IndianRupee size={16} className="text-green-600" /> Payslip — June 2026
+            <Calculator size={18} className="text-primary" /> Salary Calculation
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-1 text-sm">
-          {/* Employee info */}
-          <div className="bg-muted/40 rounded-xl p-4 space-y-1">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Employee Name</span>
-              <span className="font-semibold">{employee.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Employee ID</span>
-              <span className="font-mono text-xs font-semibold">{employee.id}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Designation</span>
-              <span className="font-semibold">{employee.designation}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Department</span>
-              <span className="font-semibold">{employee.role}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Pay Month</span>
-              <span className="font-semibold">June 2026</span>
-            </div>
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+            <Select value={employeeId} onValueChange={(value) => { setEmployeeId(value); setCalculation(null); setExistingSalary(false); }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {records.map((record) => (
+                  <SelectItem key={record.id} value={record.id}>
+                    {record.name} - {record.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={calculate} disabled={!employeeId || loading} className="gap-2">
+              <Calculator size={15} /> {loading ? "Calculating..." : "Calculate"}
+            </Button>
           </div>
 
-          {/* Earnings */}
-          <div>
-            <p className="font-bold text-xs text-muted-foreground uppercase tracking-widest mb-2">Earnings</p>
-            <div className="space-y-1.5">
-              {[
-                { label: "Basic Salary",       value: monthly },
-                { label: "HRA",                value: c.hra },
-                { label: "Travel Allowance",   value: c.travel },
-                { label: "Medical Allowance",  value: c.medical },
-                { label: "Performance Bonus",  value: c.bonus },
-              ].map(row => (
-                <div key={row.label} className="flex justify-between">
-                  <span className="text-muted-foreground">{row.label}</span>
-                  <span className="font-medium tabular-nums">{inr(row.value)}</span>
-                </div>
-              ))}
+          {selected && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-md border bg-muted/20 p-4 text-sm">
+              <div><span className="text-muted-foreground block">Employee</span><span className="font-semibold">{selected.name}</span></div>
+              <div><span className="text-muted-foreground block">Employee ID</span><span className="font-mono font-semibold">{selected.id}</span></div>
+              <div><span className="text-muted-foreground block">Department</span><span className="font-semibold">{selected.department}</span></div>
+              <div><span className="text-muted-foreground block">Designation</span><span className="font-semibold">{selected.designation}</span></div>
             </div>
-            <Separator className="mt-2.5 mb-1.5" />
-            <div className="flex justify-between font-semibold text-green-600">
-              <span>Gross Earnings</span>
-              <span className="tabular-nums">{inr(c.gross)}</span>
-            </div>
-          </div>
+          )}
 
-          {/* Deductions */}
-          <div>
-            <p className="font-bold text-xs text-muted-foreground uppercase tracking-widest mb-2">Deductions</p>
-            <div className="space-y-1.5">
-              {[
-                { label: "Provident Fund (PF)", value: c.pf },
-                { label: "Professional Tax",    value: c.profTax },
-              ].map(row => (
-                <div key={row.label} className="flex justify-between">
-                  <span className="text-muted-foreground">{row.label}</span>
-                  <span className="font-medium text-red-500 tabular-nums">−{inr(row.value)}</span>
-                </div>
-              ))}
+          {existingSalary && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold">Existing Salary Found</p>
+                <p>This employee already has a salary record for this month. Use Update only after review.</p>
+              </div>
             </div>
-            <Separator className="mt-2.5 mb-1.5" />
-            <div className="flex justify-between font-semibold text-red-500">
-              <span>Total Deductions</span>
-              <span className="tabular-nums">−{inr(c.deductions)}</span>
-            </div>
-          </div>
+          )}
 
-          {/* Net Salary */}
-          <div className="bg-primary/8 border border-primary/20 rounded-xl p-4 flex justify-between items-center">
-            <span className="font-bold text-base">Net Salary</span>
-            <span className="font-bold text-xl text-primary tabular-nums">{inr(c.net)}</span>
-          </div>
+          {calculation ? (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Salary</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <Row label="Monthly Salary" value={inr(calculation.salary.monthlySalary)} />
+                  <Row label="Selected Month" value={calculation.monthLabel} />
+                  <Row label="Daily Rate" value={inr(calculation.salary.dailyRate)} />
+                  <Separator />
+                  <Row label="Gross Salary" value={inr(calculation.salary.grossSalary)} strong />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Attendance Summary</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <Row label="Calendar Days" value={calculation.attendance.calendarDays} />
+                  <Row label="Working Days" value={calculation.attendance.workingDays} />
+                  <Row label="Present Days" value={calculation.attendance.presentDays} />
+                  <Row label="Absent Days" value={calculation.attendance.absentDays} />
+                  <Row label="Weekly Offs" value={calculation.attendance.weeklyOffs} />
+                  <Row label="Company Holidays" value={calculation.attendance.companyHolidays} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Leave Summary</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {leaveRows.map((leave) => (
+                    <Row key={leave.type} label={leave.type} value={`${leave.days} ${leave.paid ? "paid" : "unpaid"}`} />
+                  ))}
+                  <Separator />
+                  <Row label="Total Paid Leave" value={calculation.leave.paidLeaveDays} strong />
+                  <Row label="Total Unpaid Leave" value={calculation.leave.unpaidLeaveDays} strong />
+                </CardContent>
+              </Card>
+
+              <Card className="xl:col-span-3">
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Salary Calculation</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-2 text-center text-sm">
+                    {[
+                      ["Monthly Salary", inr(calculation.salary.monthlySalary)],
+                      ["Payable Working Days", calculation.attendance.workingDays],
+                      ["Leave / Attendance Adjustment", `${calculation.leave.unpaidLeaveDays} unpaid days`],
+                      ["Leave Deduction", inr(calculation.salary.leaveDeduction)],
+                      ["Final Salary", inr(calculation.salary.netSalary)],
+                    ].map(([label, value], index) => (
+                      <div key={label} className="rounded-md border bg-muted/20 p-3 relative">
+                        <p className="text-xs text-muted-foreground">{label}</p>
+                        <p className="font-bold mt-1">{value}</p>
+                        {index < 4 && <span className="hidden md:block absolute -right-2 top-1/2 -translate-y-1/2 text-muted-foreground">-&gt;</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-md border p-4 space-y-2 text-sm">
+                    <Row label="Gross Salary" value={inr(calculation.salary.grossSalary)} />
+                    <Row label="Deductions" value={inr(calculation.salary.totalDeductions)} />
+                    <Separator />
+                    <Row label="Net / Final Salary" value={inr(calculation.salary.netSalary)} strong />
+                  </div>
+                  <p className="lg:col-span-2 text-xs text-muted-foreground">
+                    {calculation.attendance.source} {calculation.leave.duplicateHandling}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
+              Select an employee and click Calculate to review trusted backend salary details.
+            </div>
+          )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
-          <Button size="sm" className="gap-2" onClick={() => {
-            const win = window.open("", "_blank", "width=700,height=800");
-            if (!win) return;
-            win.document.write(`<!DOCTYPE html><html><head><title>Payslip - ${employee.name} - June 2026</title><style>body{font-family:Arial,sans-serif;padding:32px;max-width:600px;margin:0 auto;color:#111}h2{font-size:20px;margin:0}h3{font-size:14px;margin:0 0 16px;color:#555}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #D4AF37}.badge{background:#D4AF37;color:#111;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f9f9f9;padding:16px;border-radius:8px;margin-bottom:20px;font-size:13px}.info-item .label{color:#666;font-size:11px;margin-bottom:2px}.info-item .val{font-weight:600}.section-title{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin:16px 0 8px}.row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px solid #f0f0f0}.row.total{border-top:2px solid #ddd;border-bottom:none;font-weight:700;font-size:14px;padding-top:10px}.net-box{background:#D4AF37;color:#111;padding:16px 20px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;margin-top:20px}.net-box .net-label{font-size:14px;font-weight:600}.net-box .net-val{font-size:22px;font-weight:800}.red{color:#c0392b}</style></head><body><div class="header"><div><h2>PAYSLIP</h2><h3>Corecode Global · PLANWAY</h3></div><div class="badge">June 2026</div></div><div class="info-grid"><div class="info-item"><div class="label">Employee Name</div><div class="val">${employee.name}</div></div><div class="info-item"><div class="label">Employee ID</div><div class="val">${employee.id}</div></div><div class="info-item"><div class="label">Designation</div><div class="val">${employee.designation}</div></div><div class="info-item"><div class="label">Pay Period</div><div class="val">01 Jun – 30 Jun 2026</div></div></div><div class="section-title">Earnings</div><div class="row"><span>Basic Salary</span><span>₹${new Intl.NumberFormat("en-IN").format(monthly)}</span></div><div class="row"><span>HRA</span><span>₹${new Intl.NumberFormat("en-IN").format(c.hra)}</span></div><div class="row"><span>Travel Allowance</span><span>₹${new Intl.NumberFormat("en-IN").format(c.travel)}</span></div><div class="row"><span>Medical Allowance</span><span>₹${new Intl.NumberFormat("en-IN").format(c.medical)}</span></div><div class="row"><span>Performance Bonus</span><span>₹${new Intl.NumberFormat("en-IN").format(c.bonus)}</span></div><div class="row total"><span>Gross Earnings</span><span>₹${new Intl.NumberFormat("en-IN").format(c.gross)}</span></div><div class="section-title">Deductions</div><div class="row"><span>Provident Fund (PF)</span><span class="red">−₹${new Intl.NumberFormat("en-IN").format(c.pf)}</span></div><div class="row"><span>Professional Tax</span><span class="red">−₹${new Intl.NumberFormat("en-IN").format(c.profTax)}</span></div><div class="row total"><span>Total Deductions</span><span class="red">−₹${new Intl.NumberFormat("en-IN").format(c.deductions)}</span></div><div class="net-box"><span class="net-label">Net Salary</span><span class="net-val">₹${new Intl.NumberFormat("en-IN").format(c.net)}</span></div></body></html>`);
-            win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400);
-          }}>
-            <Download size={13} /> Download PDF
-          </Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          {existingSalary ? (
+            <Button onClick={() => assign(true)} disabled={!calculation || assigning} className="gap-2">
+              <CheckCircle2 size={15} /> {assigning ? "Updating..." : "Update Salary"}
+            </Button>
+          ) : (
+            <Button onClick={() => assign(false)} disabled={!calculation || assigning} className="gap-2">
+              <CheckCircle2 size={15} /> {assigning ? "Assigning..." : "Assign Salary"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-/* ─── Main Component ──────────────────────────────────────── */
 export default function SalaryManagement() {
-  const [search, setSearch]       = useState("");
-  const [sortAsc, setSortAsc]     = useState(true);
-  const [payslipEmployee, setPayslipEmployee] = useState<typeof PAYROLL[0] | null>(null);
+  const { toast } = useToast();
+  const [month, setMonth] = useState(currentMonth());
+  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [designationFilter, setDesignationFilter] = useState("all");
+  const [sortAsc, setSortAsc] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeEmployeeId, setActiveEmployeeId] = useState("");
 
-  const filtered = PAYROLL
-    .filter(p =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.role.toLowerCase().includes(search.toLowerCase()) ||
-      p.designation.toLowerCase().includes(search.toLowerCase())
-    )
-    .sort((a, b) => sortAsc ? a.base - b.base : b.base - a.base);
+  const loadDashboard = async () => {
+    setLoading(true);
+    try {
+      setData(await apiJson<DashboardResponse>(`/api/salary/dashboard?month=${month}`));
+    } catch (error) {
+      toast({ title: "Unable to load salary data", description: error instanceof Error ? error.message : "Backend request failed.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboard();
+  }, [month]);
+
+  const records = data?.records ?? [];
+  const designations = useMemo(() => Array.from(new Set(records.map((record) => record.designation))).sort(), [records]);
+  const statusOptions = useMemo(() => Array.from(new Set(records.map((record) => record.status))).sort(), [records]);
+
+  const filtered = records
+    .filter((record) => {
+      const q = search.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        record.name.toLowerCase().includes(q) ||
+        record.id.toLowerCase().includes(q) ||
+        record.designation.toLowerCase().includes(q) ||
+        record.department.toLowerCase().includes(q) ||
+        record.status.toLowerCase().includes(q);
+      const matchesStatus = statusFilter === "all" || record.status === statusFilter;
+      const matchesDesignation = designationFilter === "all" || record.designation === designationFilter;
+      return matchesSearch && matchesStatus && matchesDesignation;
+    })
+    .sort((a, b) => sortAsc ? a.netSalary - b.netSalary : b.netSalary - a.netSalary);
+
+  const exportSalaryReport = () => {
+    const header = ["ID", "Name", "Department", "Designation", "Monthly Salary", "Gross Salary", "Paid Leave", "Unpaid Leave", "Leave Deduction", "Net Salary", "Assigned"];
+    const rows = records.map((record) => [
+      record.id,
+      record.name,
+      record.department,
+      record.designation,
+      record.monthlySalary,
+      record.grossSalary,
+      record.paidLeaveDays,
+      record.unpaidLeaveDays,
+      record.leaveDeduction,
+      record.netSalary,
+      record.assignment.exists ? "Yes" : "No",
+    ]);
+    downloadTextFile(`CODE-CORE-Salary-${month}.csv`, [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n"));
+  };
+
+  const openCalculation = (employeeId?: string) => {
+    setActiveEmployeeId(employeeId ?? filtered[0]?.id ?? records[0]?.id ?? "");
+    setDialogOpen(true);
+  };
+
+  const summary = data?.summary ?? {
+    employeeCount: 0,
+    totalMonthlySalary: 0,
+    avgMonthlySalary: 0,
+    assignedCount: 0,
+    pendingCount: 0,
+  };
 
   return (
     <div className="space-y-5 pb-8">
-      {/* Header */}
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Salary Management</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Payroll, compensation &amp; payment schedules · Indian Rupees (INR)
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold">Salary Assign</span>
+            <Button size="sm" className="h-8 gap-2" onClick={() => openCalculation()}>
+              <Calculator size={14} /> Calculate Salary
+            </Button>
+          </div>
         </div>
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => {
-          const win = window.open("", "_blank", "width=900,height=600");
-          if (!win) return;
-          const rows = PAYROLL.map(p => {
-            const m = Math.round(p.base / 12);
-            const c = getComponents(m);
-            return `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.designation}</td><td>₹${new Intl.NumberFormat("en-IN").format(p.base)}</td><td>₹${new Intl.NumberFormat("en-IN").format(m)}</td><td>₹${new Intl.NumberFormat("en-IN").format(c.net)}</td><td>${p.status}</td></tr>`;
-          }).join("");
-          win.document.write(`<!DOCTYPE html><html><head><title>Payroll Report — June 2026</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin-bottom:4px}.sub{font-size:11px;color:#666;margin-bottom:16px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #ddd;padding:7px 10px;text-align:left}th{background:#f5f5f5;font-weight:600}tr:nth-child(even){background:#fafafa}</style></head><body><h1>Payroll Report — June 2026</h1><div class="sub">Total Monthly: ₹${new Intl.NumberFormat("en-IN").format(totalMonthly)} · Exported ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</div><table><thead><tr><th>ID</th><th>Name</th><th>Designation</th><th>Annual Salary</th><th>Monthly</th><th>Net/Month</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
-          win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400);
-        }}>
-          <Download size={14} /> Export Payroll
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-8 w-full sm:w-40" />
+          <Button variant="outline" size="sm" className="gap-2" onClick={exportSalaryReport} disabled={!records.length}>
+            <Download size={14} /> Export Salary Report
+          </Button>
+        </div>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {[
-          {
-            label: "Total Monthly Payroll",
-            value: inr(totalMonthly),
-            sub:   `${inr(totalAnnualPayroll, { compact: true })} annually`,
-            icon:  IndianRupee,
-            color: "text-green-600",
-            bg:    "bg-green-100",
-          },
-          {
-            label: "Avg Monthly Salary",
-            value: inr(avgMonthly),
-            sub:   `${inr(avgMonthly * 12)} per year`,
-            icon:  TrendingUp,
-            color: "text-blue-600",
-            bg:    "bg-blue-100",
-          },
-          {
-            label: "Paid This Month",
-            value: `${paidCount} / ${PAYROLL.length}`,
-            sub:   `${PAYROLL.length - paidCount} on leave`,
-            icon:  Users,
-            color: "text-purple-600",
-            bg:    "bg-purple-100",
-          },
-          {
-            label: "Next Pay Date",
-            value: "30 Jun 2026",
-            sub:   "On time",
-            icon:  Clock,
-            color: "text-orange-600",
-            bg:    "bg-orange-100",
-          },
-        ].map((stat, i) => (
-          <motion.div key={stat.label} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
+          { label: "Total Net Salary", value: inr(summary.totalMonthlySalary), sub: `${summary.employeeCount} employees`, icon: IndianRupee, color: "text-green-600", bg: "bg-green-100" },
+          { label: "Average Net Salary", value: inr(summary.avgMonthlySalary), sub: "Current month", icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-100" },
+          { label: "Assigned", value: `${summary.assignedCount} / ${summary.employeeCount}`, sub: `${summary.pendingCount} pending`, icon: Users, color: "text-purple-600", bg: "bg-purple-100" },
+        ].map((stat, index) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }}>
             <Card className="border shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-5 flex items-start justify-between gap-3">
+              <CardContent className="min-h-32 p-5 flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-muted-foreground">{stat.label}</p>
-                  <h3 className="text-lg font-bold mt-1 truncate">{stat.value}</h3>
-                  <p className="text-[11px] text-muted-foreground/70 mt-0.5">{stat.sub}</p>
+                  <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
+                  <h3 className="text-2xl font-bold mt-2 truncate tabular-nums">{stat.value}</h3>
+                  <p className="text-xs text-muted-foreground/75 mt-1">{stat.sub}</p>
                 </div>
-                <div className={`p-2.5 rounded-xl shrink-0 ${stat.bg} ${stat.color}`}>
-                  <stat.icon size={18} />
+                <div className={`p-3 rounded-full shrink-0 ${stat.bg} ${stat.color}`}>
+                  <stat.icon size={20} />
                 </div>
               </CardContent>
             </Card>
@@ -266,19 +501,29 @@ export default function SalaryManagement() {
         ))}
       </div>
 
-      {/* Table */}
       <Card className="border shadow-sm">
         <CardHeader className="border-b bg-muted/20 py-3 px-5">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <CardTitle className="text-sm font-semibold">Employee Salary Records</CardTitle>
-            <div className="relative w-56">
-              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search employees…"
-                className="pl-9 h-8 text-sm"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
+            <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+              <div className="relative flex-1 sm:w-56">
+                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input placeholder="Search employees..." className="pl-9 h-8 text-sm" value={search} onChange={(event) => setSearch(event.target.value)} />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-8 text-xs sm:w-36"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {statusOptions.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={designationFilter} onValueChange={setDesignationFilter}>
+                <SelectTrigger className="h-8 text-xs sm:w-52"><SelectValue placeholder="Designation" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Designations</SelectItem>
+                  {designations.map((designation) => <SelectItem key={designation} value={designation}>{designation}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardHeader>
@@ -287,96 +532,77 @@ export default function SalaryManagement() {
             <TableHeader className="bg-muted/30">
               <TableRow>
                 <TableHead className="text-xs">Employee</TableHead>
+                <TableHead className="text-xs">Department</TableHead>
                 <TableHead className="text-xs">Designation</TableHead>
-                <TableHead
-                  className="text-xs cursor-pointer select-none"
-                  onClick={() => setSortAsc(s => !s)}
-                >
+                <TableHead className="text-xs">Monthly Salary</TableHead>
+                <TableHead className="text-xs">Gross</TableHead>
+                <TableHead className="text-xs">Leave / LOP</TableHead>
+                <TableHead className="text-xs">Leave Deduction</TableHead>
+                <TableHead className="text-xs cursor-pointer select-none" onClick={() => setSortAsc((value) => !value)}>
                   <div className="flex items-center gap-1">
-                    Annual Salary
-                    {sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                    Net Salary {sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                   </div>
                 </TableHead>
-                <TableHead className="text-xs">Monthly (₹)</TableHead>
-                <TableHead className="text-xs">Net / Month</TableHead>
-                <TableHead className="text-xs">Status</TableHead>
-                <TableHead className="text-xs">Next Pay</TableHead>
-                <TableHead className="w-20 text-xs">Payslip</TableHead>
+                <TableHead className="text-xs">Assignment</TableHead>
+                <TableHead className="w-24 text-xs">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center text-muted-foreground text-sm">
-                    No employees found.
-                  </TableCell>
-                </TableRow>
-              ) : filtered.map((p, i) => {
-                const monthly = Math.round(p.base / 12);
-                const net     = getComponents(monthly).net;
-                return (
-                  <motion.tr
-                    key={p.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.03 }}
-                    className="border-b hover:bg-muted/20 transition-colors"
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                            {p.name.split(" ").map(n => n[0]).join("").substring(0, 2)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium text-sm leading-tight">{p.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{p.id}</p>
-                        </div>
+              {loading ? (
+                <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground text-sm">Loading salary data...</TableCell></TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground text-sm">No employees found.</TableCell></TableRow>
+              ) : filtered.map((record, index) => (
+                <motion.tr key={record.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: index * 0.03 }} className="border-b hover:bg-muted/20 transition-colors">
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        {record.avatarUrl && <AvatarImage src={record.avatarUrl} alt={record.name} />}
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+                          {record.name.split(" ").map((part) => part[0]).join("").substring(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-sm leading-tight">{record.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{record.id}</p>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{p.designation}</TableCell>
-                    <TableCell className="font-bold text-sm tabular-nums">{inr(p.base)}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground tabular-nums">{inr(monthly)}</TableCell>
-                    <TableCell className="text-sm font-semibold text-green-700 tabular-nums">{inr(net)}</TableCell>
-                    <TableCell>
-                      <Badge className={p.paid
-                        ? "bg-green-100 text-green-700 hover:bg-green-100 border-green-200"
-                        : "bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200"
-                      }>
-                        {p.paid ? "Paid" : "On Leave"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{p.nextPay}</TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs px-2 text-primary hover:text-primary hover:bg-primary/10"
-                        onClick={() => setPayslipEmployee(p)}
-                      >
-                        View
-                      </Button>
-                    </TableCell>
-                  </motion.tr>
-                );
-              })}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">{record.department}</TableCell>
+                  <TableCell className="text-sm">{record.designation}</TableCell>
+                  <TableCell className="text-sm tabular-nums">{inr(record.monthlySalary)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground tabular-nums">{inr(record.grossSalary)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{record.paidLeaveDays + record.unpaidLeaveDays} / {record.unpaidLeaveDays}</TableCell>
+                  <TableCell className="text-sm text-red-500 tabular-nums">{inr(record.leaveDeduction)}</TableCell>
+                  <TableCell className="font-bold text-sm tabular-nums">{inr(record.netSalary)}</TableCell>
+                  <TableCell>
+                    <Badge className={record.assignment.exists ? "bg-green-100 text-green-700 hover:bg-green-100 border-green-200" : "bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200"}>
+                      {record.assignment.exists ? "Assigned" : "Pending"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-primary hover:text-primary hover:bg-primary/10" onClick={() => openCalculation(record.id)}>
+                      Review
+                    </Button>
+                  </TableCell>
+                </motion.tr>
+              ))}
             </TableBody>
           </Table>
         </div>
         <div className="px-5 py-3 border-t bg-muted/10 flex justify-between items-center text-xs text-muted-foreground">
-          <span>Showing {filtered.length} of {PAYROLL.length} employees</span>
-          <span className="font-semibold">
-            Total Monthly: <span className="text-foreground">{inr(totalMonthly)}</span>
-          </span>
+          <span>Showing {filtered.length} of {records.length} employees</span>
+          <span className="font-semibold">Total Net: <span className="text-foreground">{inr(summary.totalMonthlySalary)}</span></span>
         </div>
       </Card>
 
-      {/* Payslip Dialog */}
-      <PayslipDialog
-        employee={payslipEmployee}
-        open={!!payslipEmployee}
-        onClose={() => setPayslipEmployee(null)}
+      <SalaryCalculationDialog
+        open={dialogOpen}
+        records={records}
+        month={month}
+        initialEmployeeId={activeEmployeeId}
+        onClose={() => setDialogOpen(false)}
+        onAssigned={loadDashboard}
       />
     </div>
   );

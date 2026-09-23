@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Check, Clock, Search, Trash2, CheckCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { notifications as initialNotifications } from "@/data/mockData";
+import { getBoardMoveNotifications, type BoardMoveNotification } from "@/lib/boardAudit";
+import { markAllNotificationsRead, markNotificationRead } from "@/lib/api";
 
-type Notification = typeof initialNotifications[0];
+type BaseNotification = typeof initialNotifications[0];
+type Notification = BaseNotification | BoardMoveNotification;
 type FilterTab = "All" | "Unread" | "Approved" | "Pending" | "Rejected";
 
 const FILTER_TABS: FilterTab[] = ["All", "Unread", "Approved", "Pending", "Rejected"];
@@ -17,6 +21,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function getNotifStatus(notif: Notification): string {
+  if (isBoardMoveNotification(notif)) return "Pending";
+
   const msg = (notif.message + " " + notif.title).toLowerCase();
   if (msg.includes("approv") || msg.includes("approved")) return "Approved";
   if (msg.includes("reject") || msg.includes("rejected")) return "Rejected";
@@ -28,17 +34,26 @@ function getTimeAgo(time: string): string {
   return time;
 }
 
-function NotificationItem({ notif, onRead, onDelete }: {
+function isBoardMoveNotification(notif: Notification): notif is BoardMoveNotification {
+  return "movement" in notif;
+}
+
+function NotificationItem({ notif, onRead, onDelete, onStatusUpdate, onOpenMoveDetails }: {
   notif: Notification;
   onRead: (id: string) => void;
   onDelete: (id: string) => void;
+  onStatusUpdate: (id: string, status: "Approved" | "Rejected") => void;
+  onOpenMoveDetails: (notif: BoardMoveNotification) => void;
 }) {
   const status = getNotifStatus(notif);
 
   return (
     <div
       className={`group flex items-start gap-4 px-5 py-4 border-b last:border-b-0 transition-colors hover:bg-muted/30 cursor-pointer ${!notif.read ? "bg-primary/5" : "bg-background"}`}
-      onClick={() => onRead(notif.id)}
+      onClick={() => {
+        onRead(notif.id);
+        if (isBoardMoveNotification(notif)) onOpenMoveDetails(notif);
+      }}
     >
       {/* Unread dot */}
       <div className="mt-1.5 shrink-0">
@@ -68,6 +83,26 @@ function NotificationItem({ notif, onRead, onDelete }: {
         </div>
         <div className="mt-2 flex items-center gap-2">
           <Badge variant="outline" className="text-[10px] font-normal h-5 px-2">{notif.category}</Badge>
+          {status === "Pending" && !isBoardMoveNotification(notif) && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-[10px]"
+                onClick={e => { e.stopPropagation(); onStatusUpdate(notif.id, "Approved"); }}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-[10px]"
+                onClick={e => { e.stopPropagation(); onStatusUpdate(notif.id, "Rejected"); }}
+              >
+                Reject
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -83,13 +118,47 @@ function NotificationItem({ notif, onRead, onDelete }: {
 }
 
 export default function Notifications() {
-  const [notifs, setNotifs] = useState(initialNotifications);
+  const [notifs, setNotifs] = useState<Notification[]>(() => [
+    ...getBoardMoveNotifications(),
+    ...initialNotifications,
+  ]);
   const [activeFilter, setActiveFilter] = useState<FilterTab>("All");
   const [search, setSearch] = useState("");
+  const [selectedMove, setSelectedMove] = useState<BoardMoveNotification | null>(null);
 
-  const markRead = (id: string) => setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-  const markAllRead = () => setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+  useEffect(() => {
+    const syncBoardNotifications = () => {
+      setNotifs(prev => [
+        ...getBoardMoveNotifications(),
+        ...prev.filter(n => !isBoardMoveNotification(n)),
+      ]);
+    };
+
+    syncBoardNotifications();
+    window.addEventListener("planyway-board-notifications-updated", syncBoardNotifications);
+    return () => window.removeEventListener("planyway-board-notifications-updated", syncBoardNotifications);
+  }, []);
+
+  const markRead = (id: string) => {
+    setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    const notification = notifs.find(n => n.id === id);
+    if (notification && !isBoardMoveNotification(notification)) {
+      markNotificationRead(id).catch(error => console.error("Unable to persist notification read state.", error));
+    }
+  };
+  const markAllRead = () => {
+    setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+    markAllNotificationsRead().catch(error => console.error("Unable to persist notification read state.", error));
+  };
   const deleteNotif = (id: string) => setNotifs(prev => prev.filter(n => n.id !== id));
+  const updateStatus = (id: string, status: "Approved" | "Rejected") => {
+    setNotifs(prev => prev.map(n => n.id === id ? {
+      ...n,
+      read: false,
+      title: `${status}: ${n.title.replace(/^(Approved|Rejected):\s*/, "")}`,
+      message: `Status changed to ${status}. ${n.message.replace(/^Status changed to (Approved|Rejected)\.\s*/, "")}`,
+    } : n));
+  };
 
   const unreadCount = notifs.filter(n => !n.read).length;
 
@@ -183,6 +252,8 @@ export default function Notifications() {
                 notif={notif}
                 onRead={markRead}
                 onDelete={deleteNotif}
+                onStatusUpdate={updateStatus}
+                onOpenMoveDetails={setSelectedMove}
               />
             ))
           ) : (
@@ -203,6 +274,65 @@ export default function Notifications() {
           </div>
         )}
       </div>
+
+      <Dialog open={Boolean(selectedMove)} onOpenChange={(open) => { if (!open) setSelectedMove(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Board Movement Details</DialogTitle>
+          </DialogHeader>
+
+          {selectedMove && (
+            <div className="space-y-4 text-sm">
+              <div>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Card / Task</p>
+                <p className="font-medium">{selectedMove.movement.cardName}</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Old Status</p>
+                  <p className="font-medium">{selectedMove.movement.oldStatus}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">New Status</p>
+                  <p className="font-medium">{selectedMove.movement.newStatus}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Reason</p>
+                  <p className="font-medium">
+                    {selectedMove.movement.reason === "Other"
+                      ? selectedMove.movement.customReason
+                      : selectedMove.movement.reason}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Moved By</p>
+                  <p className="font-medium">{selectedMove.movement.movedBy}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Date & Time</p>
+                <p className="font-medium">{selectedMove.time}</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Comments / Description</p>
+                <p className="mt-1 rounded-lg border bg-muted/30 p-3 text-muted-foreground">
+                  {selectedMove.movement.comment || "No comments added."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setSelectedMove(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

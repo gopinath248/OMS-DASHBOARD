@@ -1,0 +1,15 @@
+
+> @workspace/smart-cp@0.0.0 dev /home/runner/workspace/cc1/artifacts/smart-cp
+> vite --config vite.config.ts --host 0.0.0.0
+
+[replit-cartographer] Loaded @theme tokens from /home/runner/workspace/cc1/artifacts/smart-cp/src/index.css
+
+  [32m[1mVITE[22m v7.3.3[39m  [2mready in [0m[1m1365[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5000[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.24.0.2:[1m5000[22m/[39m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[RUNTIME_ERROR]{"type":"runtime-error","timestamp":1782801700851,"name":"Error","message":"DEPTS is not defined","stack":"    at Reports /home/runner/workspace/cc1/artifacts/smart-cp/src/pages/Reports.tsx:308:20\n\n\n\n\n\n\n\n\n","loc":{"line":308,"column":20,"file":"/home/runner/workspace/cc1/artifacts/smart-cp/src/pages/Reports.tsx"},"frame":"306|                  <SelectContent>\n307|                    <SelectItem value=\"all\">All Designations</SelectItem>\n308|                    {DEPTS.map(d => <SelectItem key={d} value={d.toLowerCase()}>{d}</SelectItem>)}\n   |                     ^\n309|                  </SelectContent>\n310|                </Select>"}
+
+[31mCould not open Reports.tsx in the editor.[39m
+

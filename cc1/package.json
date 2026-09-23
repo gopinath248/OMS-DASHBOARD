@@ -3,14 +3,20 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "preinstall": "node -e \"const fs = require('fs'); for (const file of ['package-lock.json', 'yarn.lock']) { if (fs.existsSync(file)) fs.rmSync(file); } const userAgent = process.env.npm_config_user_agent || ''; if (!userAgent.startsWith('pnpm/')) { console.error('Use pnpm instead'); process.exit(1); }\"",
+    "build": "corepack pnpm run typecheck && corepack pnpm -r --if-present run build",
+    "db:init": "corepack pnpm --filter @workspace/scripts run db:init",
+    "db:seed-admin": "corepack pnpm --filter @workspace/scripts run seed:planway-users",
+    "db:setup": "corepack pnpm --filter @workspace/scripts run setup:smart-cp",
+    "dev:backend": "corepack pnpm --filter @workspace/api-server run dev",
+    "dev:frontend": "corepack pnpm --filter @workspace/smart-cp run dev",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
   "devDependencies": {
     "prettier": "^3.8.3",
     "typescript": "~5.9.3"
-  }
+  },
+  "packageManager": "pnpm@9.15.5+sha512.845196026aab1cc3f098a0474b64dfbab2afe7a1b4e91dd86895d8e4aa32a7a6d03049e2d0ad770bbe4de023a7122fb68c1a1d6e0d033c7076085f9d5d4800d4"
 }

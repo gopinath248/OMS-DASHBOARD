@@ -5,17 +5,17 @@ version = "1.0.0"
 id = "3B4_FFSkEVBkAeYMFRJ2e"
 
 [[services]]
-localPort = 8080
+localPort = 5000
 name = "API Server"
 paths = ["/api"]
 
 [services.development]
-run = "pnpm --filter @workspace/api-server run dev"
+run = "corepack pnpm --filter @workspace/api-server run dev"
 
 [services.production]
 
 [services.production.build]
-args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
+args = ["corepack", "pnpm", "--filter", "@workspace/api-server", "run", "build"]
 
 [services.production.build.env]
 NODE_ENV = "production"
@@ -25,8 +25,12 @@ NODE_ENV = "production"
 args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 
 [services.production.run.env]
-PORT = "8080"
+PORT = "5000"
 NODE_ENV = "production"
+DB_HOST = "localhost"
+DB_PORT = "5432"
+DB_NAME = "smart_cp"
+DB_USER = "postgres"
 
 [services.production.health.startup]
 path = "/api/healthz"

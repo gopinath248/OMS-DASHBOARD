@@ -3,36 +3,70 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from "recharts";
-import { tasks, performanceData, projects, projectDocuments } from "@/data/mockData";
-import { Link } from "wouter";
+import { hasLoadedAppData, tasks, performanceData, projects, students } from "@/data/mockData";
 import { FolderOpen } from "lucide-react";
+import { getAuthSession } from "@/lib/auth";
+
+function metricValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 export default function StudentDashboard() {
-  const myTasks = tasks.filter(t => t.assignedTo === "Alice Johnson");
+  const session = getAuthSession();
+  const currentUserId = session?.user.userId ?? "INT001";
+  const currentStudent = students.find(student =>
+    student.userId === currentUserId ||
+    student.id === currentUserId ||
+    (!!session?.user.email && student.email.toLowerCase() === session.user.email.toLowerCase())
+  );
+  const currentInternId = currentStudent?.id ?? currentUserId;
+  const currentName = currentStudent?.name ?? session?.user.fullName ?? "Intern";
+  const myTasks = tasks.filter(t => t.assignedTo === currentName);
   const completedTasks = myTasks.filter(t => t.status === "Completed");
-  const myPerformance = performanceData[0]; // Assuming Alice
+  const myPerformance = performanceData.find(p => p.internId === currentInternId);
+  const appDataLoaded = hasLoadedAppData();
+  const overallCompletion = currentStudent?.progress ?? (myTasks.length ? Math.round((completedTasks.length / myTasks.length) * 100) : 0);
 
-  const radarData = [
-    { subject: 'Attendance', A: myPerformance.attendance, fullMark: 100 },
-    { subject: 'Task', A: myPerformance.taskCompletion, fullMark: 100 },
-    { subject: 'Comm.', A: myPerformance.communication, fullMark: 100 },
-    { subject: 'Discipline', A: myPerformance.discipline, fullMark: 100 },
-    { subject: 'Learning', A: myPerformance.learning, fullMark: 100 },
-    { subject: 'Innov.', A: myPerformance.innovation, fullMark: 100 },
-  ];
+  const radarData = myPerformance
+    ? [
+        { subject: 'Attendance', A: metricValue(myPerformance.attendance), fullMark: 100 },
+        { subject: 'Task', A: metricValue(myPerformance.taskCompletion), fullMark: 100 },
+        { subject: 'Comm.', A: metricValue(myPerformance.communication), fullMark: 100 },
+        { subject: 'Discipline', A: metricValue(myPerformance.discipline), fullMark: 100 },
+        { subject: 'Learning', A: metricValue(myPerformance.learning), fullMark: 100 },
+        { subject: 'Innov.', A: metricValue(myPerformance.innovation), fullMark: 100 },
+      ]
+    : [];
+
+  if (!appDataLoaded) {
+    return (
+      <div className="space-y-6 pb-8">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Intern Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Loading your internship data...</p>
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            Loading performance...
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Student Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Welcome back, Alice! Here is your internship progress.</p>
+        <h1 className="text-3xl font-bold tracking-tight">Intern Dashboard</h1>
+        <p className="text-muted-foreground mt-1">Welcome back, {currentName.split(" ")[0]}! Here is your internship progress.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { title: "Tasks Completed", value: `${completedTasks.length}/${myTasks.length}`, icon: ClipboardList, color: "text-blue-500", bg: "bg-blue-100" },
-          { title: "Attendance", value: "95%", icon: CheckCircle2, color: "text-green-500", bg: "bg-green-100" },
-          { title: "Assigned Projects", value: projects.filter(p => p.assignedInterns.includes("STU001")).length, icon: FolderOpen, color: "text-violet-600", bg: "bg-violet-100" },
+          { title: "Attendance", value: myPerformance ? `${metricValue(myPerformance.attendance)}%` : "N/A", icon: CheckCircle2, color: "text-green-500", bg: "bg-green-100" },
+          { title: "Assigned Projects", value: projects.filter(p => p.assignedInterns.includes(currentInternId)).length, icon: FolderOpen, color: "text-violet-600", bg: "bg-violet-100" },
           { title: "Leave Balance", value: "10 Days", icon: CalendarDays, color: "text-orange-500", bg: "bg-orange-100" },
         ].map((kpi, i) => (
           <Card key={i}>
@@ -59,10 +93,12 @@ export default function StudentDashboard() {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="font-medium text-foreground">Overall Completion</span>
-                  <span className="font-medium">85%</span>
+                  <span className="font-medium">{overallCompletion}%</span>
                 </div>
-                <Progress value={85} className="h-3" />
-                <p className="text-xs text-muted-foreground mt-2">Expected completion: June 15, 2024</p>
+                <Progress value={overallCompletion} className="h-3" />
+                <p className="text-xs text-muted-foreground mt-2">
+                  {currentStudent?.endDate ? `Expected completion: ${currentStudent.endDate}` : "Expected completion date is not set."}
+                </p>
               </div>
 
               <div className="pt-4 border-t">
@@ -94,15 +130,22 @@ export default function StudentDashboard() {
               <CardTitle>My Performance</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                    <PolarGrid stroke="hsl(var(--border))" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: 'hsl(var(--foreground))', fontSize: 10 }} />
-                    <Radar name="Student" dataKey="A" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.4} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
+              {myPerformance ? (
+                <div className="h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                      <PolarGrid stroke="hsl(var(--border))" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: 'hsl(var(--foreground))', fontSize: 10 }} />
+                      <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                      <Radar name="Student" dataKey="A" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.4} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="flex h-[250px] items-center justify-center rounded-lg border border-dashed text-center text-sm text-muted-foreground">
+                  No performance data available yet.
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -112,11 +155,13 @@ export default function StudentDashboard() {
                 <Award size={24} />
               </div>
               <h3 className="font-bold text-lg mb-2">Certificate Eligibility</h3>
-              <Badge className="bg-green-500 text-white mb-4 hover:bg-green-600">Eligible</Badge>
+              <Badge className={myPerformance ? "bg-green-500 text-white mb-4 hover:bg-green-600" : "mb-4"} variant={myPerformance ? "default" : "outline"}>
+                {myPerformance ? "Eligible" : "Pending Review"}
+              </Badge>
               <div className="space-y-2 text-sm text-left mt-4 bg-background p-4 rounded-lg">
-                <div className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500"/> {'>'} 85% Attendance</div>
-                <div className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500"/> Project Submitted</div>
-                <div className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500"/> Mentors Approval</div>
+                <div className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500"/> Attendance: {myPerformance ? `${metricValue(myPerformance.attendance)}%` : "Not available"}</div>
+                <div className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500"/> Task completion: {myPerformance ? `${metricValue(myPerformance.taskCompletion)}%` : "Not available"}</div>
+                <div className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500"/> Manager approval pending final review</div>
               </div>
             </CardContent>
           </Card>

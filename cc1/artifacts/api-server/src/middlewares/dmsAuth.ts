@@ -1,7 +1,18 @@
 import { type Request, type Response, type NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.SESSION_SECRET ?? "dms-dev-secret-key";
+function getJwtSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (secret) return secret;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET must be set in production.");
+  }
+
+  return "dms-dev-secret-key";
+}
+
+const JWT_SECRET = getJwtSecret();
 
 export interface DmsJwtPayload {
   userId: number;

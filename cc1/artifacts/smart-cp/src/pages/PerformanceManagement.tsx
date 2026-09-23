@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TrendingUp, Star } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { students, performanceData } from "@/data/mockData";
+import { students, staff, performanceData } from "@/data/mockData";
 
 function getUserId(name: string, id: string): string {
   const firstName = name.split(" ")[0];
@@ -20,11 +20,57 @@ function getRating(score: number): { label: string; stars: number; color: string
   return { label: "Needs Improvement", stars: 1, color: "text-red-600" };
 }
 
-export default function PerformanceManagement() {
-  const [selectedStudent, setSelectedStudent] = useState<string>(students[0].id);
+function employeePerformance(employee: typeof staff[number]) {
+  const base = employee.status === "Active" ? 88 : 76;
+  const leadBonus = ["manager", "manager", "manager"].includes(employee.role) ? 4 : 0;
+  const seniorBonus = employee.designation.includes("Lead") || employee.designation.includes("Senior") ? 3 : 0;
 
-  const student = students.find(s => s.id === selectedStudent);
-  const perfData = performanceData.find(p => p.internId === selectedStudent);
+  return {
+    internId: employee.id,
+    attendance: Math.min(98, base + seniorBonus),
+    taskCompletion: Math.min(96, base + leadBonus),
+    communication: Math.min(97, base + 5),
+    discipline: Math.min(99, base + 6),
+    learning: Math.min(95, base + 3),
+    innovation: Math.min(94, base + seniorBonus),
+    leadership: Math.min(98, base + leadBonus + seniorBonus),
+    collaboration: Math.min(97, base + 4),
+  };
+}
+
+export default function PerformanceManagement() {
+  const people = [
+    ...students.map(person => ({
+      ...person,
+      type: "Intern" as const,
+      roleLabel: person.role,
+      displayId: getUserId(person.name, person.id),
+    })),
+    ...staff.map(person => ({
+      ...person,
+      role: "Employee",
+      type: "employee" as const,
+      roleLabel: "Employee",
+      displayId: person.id,
+    })),
+  ];
+  const [selectedStudent, setSelectedStudent] = useState<string>(() => people[0]?.id ?? "");
+
+  useEffect(() => {
+    if (!people.length) {
+      setSelectedStudent("");
+      return;
+    }
+
+    if (!people.some(person => person.id === selectedStudent)) {
+      setSelectedStudent(people[0].id);
+    }
+  }, [people, selectedStudent]);
+
+  const student = people.find(s => s.id === selectedStudent);
+  const perfData = student?.type === "employee"
+    ? employeePerformance(student)
+    : performanceData.find(p => p.internId === selectedStudent);
 
   const metrics = perfData ? [
     { subject: "Attendance", A: perfData.attendance },
@@ -74,12 +120,12 @@ export default function PerformanceManagement() {
           <h1 className="text-3xl font-bold tracking-tight">Performance Management</h1>
         </div>
         <div className="w-full sm:w-[320px]">
-          <Select value={selectedStudent} onValueChange={setSelectedStudent}>
+          <Select value={selectedStudent} onValueChange={setSelectedStudent} disabled={!people.length}>
             <SelectTrigger>
-              <SelectValue placeholder="Select Intern" />
+              <SelectValue placeholder="Select person" />
             </SelectTrigger>
-            <SelectContent>
-              {students.map(s => (
+            <SelectContent position="item-aligned" className="max-h-72 overflow-y-auto">
+              {people.map(s => (
                 <SelectItem key={s.id} value={s.id}>
                   {s.name} — {s.role}
                 </SelectItem>
@@ -92,34 +138,34 @@ export default function PerformanceManagement() {
       {student && perfData ? (
         <>
           {/* Intern Info Card */}
-          <div className="bg-card border rounded-xl p-5 flex flex-wrap gap-6 items-center shadow-sm">
-            <div className="flex items-center gap-4">
+          <div className="bg-card border rounded-xl p-5 shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(240px,1.4fr)_repeat(5,minmax(110px,1fr))] gap-4 items-center">
+            <div className="flex items-center gap-4 min-w-0">
               <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-lg">
                 {student.name.split(" ").map(n => n[0]).join("").substring(0,2)}
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="font-bold text-lg leading-tight">{student.name}</p>
-                <p className="text-xs text-muted-foreground font-mono">{getUserId(student.name, student.id)}</p>
+                <p className="text-xs text-muted-foreground font-mono">{student.displayId}</p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-4 text-sm">
-              <div>
+              <div className="rounded-lg bg-muted/30 px-3 py-2">
                 <p className="text-xs text-muted-foreground">Role</p>
-                <p className="font-semibold">{student.role}</p>
+                <p className="font-semibold">{student.roleLabel}</p>
               </div>
-              <div>
+              <div className="rounded-lg bg-muted/30 px-3 py-2">
                 <p className="text-xs text-muted-foreground">Rating</p>
                 <p className={`font-semibold ${rating.color}`}>{rating.label}</p>
               </div>
-              <div>
+              <div className="rounded-lg bg-muted/30 px-3 py-2">
                 <p className="text-xs text-muted-foreground">Attendance</p>
                 <p className="font-semibold">{perfData.attendance}%</p>
               </div>
-              <div>
+              <div className="rounded-lg bg-muted/30 px-3 py-2">
                 <p className="text-xs text-muted-foreground">Task Completion</p>
                 <p className="font-semibold">{perfData.taskCompletion}%</p>
               </div>
-              <div>
+              <div className="rounded-lg bg-primary/5 px-3 py-2">
                 <p className="text-xs text-muted-foreground">Performance Score</p>
                 <p className="font-semibold text-primary">{overallScore}%</p>
               </div>
@@ -247,7 +293,7 @@ export default function PerformanceManagement() {
       ) : (
         <div className="text-center py-20 text-muted-foreground">
           <TrendingUp className="mx-auto h-12 w-12 opacity-20 mb-4" />
-          <p>Select an intern to view performance data.</p>
+          <p>{people.length ? "No performance data available for the selected person." : "No employee or intern records are available yet."}</p>
         </div>
       )}
     </div>

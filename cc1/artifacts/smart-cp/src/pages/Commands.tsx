@@ -1,36 +1,47 @@
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import {
   Hash, Send, Search, Pin, ChevronDown, ChevronRight,
   Users, Paperclip, Smile, AtSign, MoreHorizontal, Phone,
   Video, Megaphone, CalendarDays, FolderOpen,
   Kanban, CheckCircle2, MessageSquare, X,
-  AlertTriangle, Zap, Info, ArrowLeft,
+  AlertTriangle, Zap, Info, ArrowLeft, Copy, Check,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { getAuthSession, roleToNavigationRole, type NavigationRole } from "@/lib/auth";
 
 type UserStatus = "online" | "away" | "offline" | "busy";
 type MessageReaction = { emoji: string; count: number; reacted?: boolean };
+type ChatAttachment = {
+  name: string;
+  size: number;
+  type: string;
+  lastModified?: number;
+};
 
 interface ChatMessage {
   id: string;
+  conversationId?: string;
+  senderId?: string | null;
   user: string;
   avatar: string;
+  avatarUrl?: string | null;
   role: "Admin" | "Employee" | "Intern";
   time: string;
+  createdAt?: string;
   message: string;
   pinned?: boolean;
   reactions: MessageReaction[];
   replyTo?: string;
   replyUser?: string;
   replySnippet?: string;
+  attachment?: ChatAttachment | null;
 }
-
 interface Channel {
   id: string;
   name: string;
@@ -39,191 +50,102 @@ interface Channel {
   description: string;
   members: number;
   pinCount?: number;
+  lastMessage?: string;
+  lastMessageAt?: string | null;
 }
 
 interface DmUser {
   id: string;
   name: string;
   avatar: string;
+  avatarUrl?: string | null;
   role: "Admin" | "Employee" | "Intern";
   status: UserStatus;
   unread: number;
   lastMessage: string;
+  phone?: string;
 }
 
+type BootstrapResponse = {
+  channels: Array<{
+    id: string;
+    name: string;
+    description: string;
+    icon?: string;
+    unread?: number;
+    members?: number;
+    lastMessage?: string;
+    lastMessageAt?: string | null;
+  }>;
+  directConversations: Array<{
+    id: string;
+    directKey: string;
+    lastMessage?: string;
+    lastMessageAt?: string | null;
+  }>;
+  users: Array<{
+    id: string;
+    name: string;
+    avatar: string;
+    avatarUrl?: string | null;
+    role: "Admin" | "Employee" | "Intern";
+    status?: UserStatus;
+    unread?: number;
+    phone?: string;
+  }>;
+};
+
+type ConversationMembersResponse = {
+  members: Array<{
+    id: string;
+    name: string;
+    avatar: string;
+    avatarUrl?: string | null;
+    role: "Admin" | "Employee" | "Intern";
+    status?: UserStatus;
+    phone?: string;
+  }>;
+};
+
+const CHANNEL_ICON_MAP: Record<string, React.ElementType> = {
+  Megaphone,
+  CalendarDays,
+  FolderOpen,
+  Kanban,
+  Hash,
+  Users,
+  CheckCircle2,
+};
+
 const CHANNELS: Channel[] = [
-  { id: "announcements",    name: "Announcements",    icon: Megaphone,     unread: 2, description: "Official company announcements and policy updates", members: 32, pinCount: 2 },
-  { id: "leave-requests",   name: "Leave Requests",   icon: CalendarDays,  unread: 4, description: "Leave approvals, rejections, and status updates", members: 32 },
-  { id: "project-updates",  name: "Project Updates",  icon: FolderOpen,    unread: 3, description: "Project progress, milestones, and blockers", members: 28 },
-  { id: "sprint-updates",   name: "Sprint Updates",   icon: Kanban,        unread: 1, description: "Sprint ceremonies, stories, and velocity tracking", members: 20 },
-  { id: "general",          name: "General",          icon: Hash,          unread: 7, description: "General discussion, water-cooler chats", members: 32 },
-  { id: "hr-updates",       name: "HR Updates",       icon: Users,         unread: 0, description: "HR policies, onboarding, performance news", members: 32 },
-  { id: "task-completions", name: "Task Completions", icon: CheckCircle2,  unread: 0, description: "Task done notifications and recognition", members: 32 },
+  { id: "channel:announcements",    name: "Announcements",    icon: Megaphone,     unread: 0, description: "Official company announcements and policy updates", members: 0, pinCount: 0 },
+  { id: "channel:leave-requests",   name: "Leave Requests",   icon: CalendarDays,  unread: 0, description: "Leave approvals, rejections, and status updates", members: 0 },
+  { id: "channel:project-updates",  name: "Project Updates",  icon: FolderOpen,    unread: 0, description: "Project progress, milestones, and blockers", members: 0 },
+  { id: "channel:sprint-updates",   name: "Sprint Updates",   icon: Kanban,        unread: 0, description: "Sprint ceremonies, stories, and velocity tracking", members: 0 },
+  { id: "channel:general",          name: "General",          icon: Hash,          unread: 0, description: "General discussion, water-cooler chats", members: 0 },
+  { id: "channel:hr-updates",       name: "HR Updates",       icon: Users,         unread: 0, description: "HR policies, onboarding, performance news", members: 0 },
+  { id: "channel:task-completions", name: "Task Completions", icon: CheckCircle2,  unread: 0, description: "Task done notifications and recognition", members: 0 },
 ];
 
-const DM_USERS: DmUser[] = [
-  { id: "dm-admin",   name: "Admin",         avatar: "AD", role: "Admin",    status: "online",  unread: 1, lastMessage: "Welcome to Code Core PLANWAY!" },
-  { id: "dm-smith",   name: "Dr. Smith",     avatar: "DS", role: "Employee", status: "online",  unread: 0, lastMessage: "Let me check the PR tonight" },
-  { id: "dm-davis",   name: "Prof. Davis",   avatar: "PD", role: "Employee", status: "online",  unread: 1, lastMessage: "Model metrics look great 🎉" },
-  { id: "dm-sarah",   name: "Sarah Lee",     avatar: "SL", role: "Employee", status: "away",    unread: 0, lastMessage: "On leave today, back tomorrow" },
-  { id: "dm-raj",     name: "Raj Mehta",     avatar: "RM", role: "Employee", status: "busy",    unread: 2, lastMessage: "CI runner config is updated" },
-  { id: "dm-alice",   name: "Alice Johnson", avatar: "AJ", role: "Intern",   status: "online",  unread: 0, lastMessage: "Charts are ready for review!" },
-  { id: "dm-grace",   name: "Grace Kim",     avatar: "GK", role: "Intern",   status: "online",  unread: 3, lastMessage: "@you BERT model at 91% accuracy" },
-  { id: "dm-deepika", name: "Deepika K",     avatar: "DK", role: "Intern",   status: "offline", unread: 0, lastMessage: "Healthcare AI model merged ✅" },
-];
-
-const CHANNEL_MESSAGES: Record<string, ChatMessage[]> = {
-  announcements: [
-    { id: "m1", user: "Admin", avatar: "AD", role: "Admin", time: "Today 9:00 AM",
-      message: "🎉 Welcome to the **Command Center** — Code Core's official internal communication hub. All company announcements, leave notifications, project updates, and team discussions happen here. Make sure to join the relevant channels!",
-      pinned: true, reactions: [{ emoji: "👍", count: 12 }, { emoji: "🎉", count: 7 }] },
-    { id: "m2", user: "Admin", avatar: "AD", role: "Admin", time: "Today 9:15 AM",
-      message: "📋 **Certificate Issuance Notice:** Internship completion certificates will be issued between July 1–15, 2026. All interns must complete their pending tasks and submit final reports before June 30th.",
-      pinned: true, reactions: [{ emoji: "✅", count: 15 }, { emoji: "📋", count: 4 }] },
-    { id: "m3", user: "Priya Nair", avatar: "PN", role: "Employee", time: "Today 10:30 AM",
-      message: "🗓️ Performance Review Q2 2026 is scheduled for July 5th. All employees and interns should prepare their self-assessments and task completion reports by July 3rd. Login to the Performance section to begin.",
-      pinned: false, reactions: [{ emoji: "👀", count: 8 }, { emoji: "📝", count: 3 }] },
-    { id: "m4", user: "Admin", avatar: "AD", role: "Admin", time: "Jun 20, 2026",
-      message: "🔒 New security policy: All passwords must be updated before July 1st, 2026. Two-factor authentication is now mandatory for all accounts. Contact IT for assistance.",
-      pinned: false, reactions: [{ emoji: "🔒", count: 6 }] },
-  ],
-  "leave-requests": [
-    { id: "m5", user: "Alice Johnson", avatar: "AJ", role: "Intern", time: "Today 8:45 AM",
-      message: "Hi team, I've submitted a **sick leave request** for 3 days (June 27–29). Doctor has advised rest. Supporting document attached to the leave portal. Please approve at the earliest. 🙏",
-      pinned: false, reactions: [] },
-    { id: "m6", user: "Dr. Smith", avatar: "DS", role: "Employee", time: "Today 9:05 AM",
-      message: "**@Alice Johnson** — Reviewed and **Approved ✅**. Please rest and recover. Ping me when you're back. Tasks can wait until July 1st.",
-      pinned: false, reactions: [{ emoji: "❤️", count: 3 }, { emoji: "✅", count: 2 }],
-      replyTo: "m5", replyUser: "Alice Johnson", replySnippet: "sick leave request for 3 days (June 27–29)..." },
-    { id: "m7", user: "James Moore", avatar: "JM", role: "Intern", time: "Today 11:00 AM",
-      message: "Leave request submitted: **Casual leave on July 3rd** for university exam duty. INT010. Manager notification has been sent.",
-      pinned: false, reactions: [] },
-    { id: "m8", user: "Admin", avatar: "AD", role: "Admin", time: "Today 11:20 AM",
-      message: "⚠️ **Policy Reminder:** All leave requests must be submitted **at least 3 business days in advance**. Emergency requests require medical/official documentation within 24 hours of return.",
-      pinned: true, reactions: [{ emoji: "👍", count: 5 }] },
-    { id: "m9", user: "Karen Lee", avatar: "KL", role: "Intern", time: "Today 1:00 PM",
-      message: "Sick leave request (INT011) — submitted for tomorrow June 26th. Feeling unwell since morning. Will update if situation changes.",
-      pinned: false, reactions: [{ emoji: "🙏", count: 2 }] },
-  ],
-  "project-updates": [
-    { id: "m10", user: "Deepika K", avatar: "DK", role: "Intern", time: "Yesterday 4:00 PM",
-      message: "🚀 **Healthcare AI Diagnostics (INT020)** — ML model integration at **95% completion**! Final validation runs are in progress. @Prof. Davis please review the F1-score metrics when free.",
-      pinned: false, reactions: [{ emoji: "🚀", count: 5 }, { emoji: "👏", count: 8 }, { emoji: "🔥", count: 3 }] },
-    { id: "m11", user: "Prof. Davis", avatar: "PD", role: "Employee", time: "Yesterday 4:45 PM",
-      message: "Excellent work @Deepika K! Reviewed the metrics — F1-score of 0.94 is outstanding. Merging to main once QA signs off. This is production-ready! 🎯",
-      pinned: false, reactions: [{ emoji: "✅", count: 4 }, { emoji: "🎯", count: 2 }],
-      replyTo: "m10", replyUser: "Deepika K", replySnippet: "ML model integration at 95% completion..." },
-    { id: "m12", user: "Grace Kim", avatar: "GK", role: "Intern", time: "Today 9:30 AM",
-      message: "**NLP Sentiment Analysis (INT007)** — Story CC26IPM-002 moved to Review stage ✅. Tagging @Prof. Davis for final code review before marking Done. PR link shared in the sprint board.",
-      pinned: false, reactions: [{ emoji: "👍", count: 3 }] },
-    { id: "m13", user: "Henry Wilson", avatar: "HW", role: "Intern", time: "Today 10:15 AM",
-      message: "🔧 **CI/CD Pipeline (INT008)** — 60% complete. Hitting a wall with GitHub Actions runner configuration for self-hosted agents. @Raj Mehta could you spare 15 mins for a quick call?",
-      pinned: false, reactions: [{ emoji: "🔧", count: 1 }, { emoji: "👀", count: 2 }] },
-    { id: "m14", user: "Raj Mehta", avatar: "RM", role: "Employee", time: "Today 10:45 AM",
-      message: "@Henry Wilson Sure! I've updated the runner config in our DevOps repo. Check branch `feat/runner-fix`. The YAML needs a `runs-on: self-hosted` label. DM me if you're still stuck.",
-      pinned: false, reactions: [{ emoji: "🙌", count: 4 }],
-      replyTo: "m13", replyUser: "Henry Wilson", replySnippet: "CI/CD Pipeline 60% complete. Hitting a wall..." },
-  ],
-  "sprint-updates": [
-    { id: "m15", user: "Admin", avatar: "AD", role: "Admin", time: "Jun 16, 2026",
-      message: "🚀 **Sprint S01 — Task Management Sprint STARTED!**\n📅 Duration: June 16 – June 30, 2026\n🎯 Goal: Core task management module with auth, dashboards, CI/CD\n⚡ Team capacity: 85% | Velocity target: 42sp",
-      pinned: true, reactions: [{ emoji: "🚀", count: 10 }, { emoji: "💪", count: 7 }, { emoji: "🎉", count: 5 }] },
-    { id: "m16", user: "Dr. Smith", avatar: "DS", role: "Employee", time: "Today 8:00 AM",
-      message: "📊 **Sprint S01 Mid-Sprint Health Check** (June 25)\n✅ Done: 2 stories (5sp)\n🔄 In Progress: 4 stories\n🧪 Testing: 2 stories\n🚧 Blocked: 1 story (CC26EPIC-002)\n⚠️ Blockers standup at **3:00 PM today**. Attendance mandatory.",
-      pinned: false, reactions: [{ emoji: "👀", count: 6 }, { emoji: "✅", count: 2 }] },
-    { id: "m17", user: "Frank Miller", avatar: "FM", role: "Intern", time: "Today 8:30 AM",
-      message: "🚧 **BLOCKED — CC26EPIC-002 (User Management System, INT006)**\nBlocked on Auth module dependency. The JWT middleware hasn't been merged yet. This blocks the entire user permissions layer. Escalating to @Dr. Smith for unblocking.",
-      pinned: false, reactions: [{ emoji: "🚨", count: 3 }, { emoji: "😬", count: 2 }] },
-    { id: "m18", user: "Mia Martinez", avatar: "MM", role: "Intern", time: "Today 9:00 AM",
-      message: "✅ **CC26SR-002 — API Rate Limiting** at 80%! All 200+ req/min load tests passing. Moving to final security scan before Done Story status. ETA: today EOD.",
-      pinned: false, reactions: [{ emoji: "💪", count: 5 }, { emoji: "🔥", count: 3 }] },
-  ],
-  general: [
-    { id: "m19", user: "Raj Mehta", avatar: "RM", role: "Employee", time: "Yesterday 1:00 PM",
-      message: "📅 Reminder: Office closed **July 4th, 2026** (national holiday). Please update sprint board and ensure tasks are logged before EOD July 3rd. No standup that day.",
-      pinned: false, reactions: [{ emoji: "👍", count: 9 }, { emoji: "🙏", count: 4 }] },
-    { id: "m20", user: "Alice Johnson", avatar: "AJ", role: "Intern", time: "Yesterday 2:30 PM",
-      message: "Dashboard Charts just went live on dev! Recharts integration with line, bar, and pie charts all working. Animations are 🔥. @Dr. Smith it's ready for code review! PR #47",
-      pinned: false, reactions: [{ emoji: "🔥", count: 6 }, { emoji: "👀", count: 4 }, { emoji: "😍", count: 2 }] },
-    { id: "m21", user: "Mia Martinez", avatar: "MM", role: "Intern", time: "Today 9:00 AM",
-      message: "Good morning Code Core! ☀️ Rate limiting module passed all stress tests last night. 0 failures at 250 req/min. Pushing the final commit now 💪",
-      pinned: false, reactions: [{ emoji: "💪", count: 7 }, { emoji: "🎉", count: 4 }, { emoji: "☀️", count: 3 }] },
-    { id: "m22", user: "Quinn Davis", avatar: "QD", role: "Intern", time: "Today 10:00 AM",
-      message: "Dark mode implementation (CC26IPM-006) is scoped and ready for Sprint S02. Will use CSS variables + next-themes. Design mockups shared in Figma. Feedback welcome!",
-      pinned: false, reactions: [{ emoji: "🌙", count: 8 }, { emoji: "👀", count: 3 }] },
-    { id: "m23", user: "Admin", avatar: "AD", role: "Admin", time: "Today 11:00 AM",
-      message: "📌 **Code Review Policy Update:** All PRs must receive at least 2 approvals before merging to main. PRs without reviews after 48 hours will be auto-escalated to the team lead.",
-      pinned: false, reactions: [{ emoji: "✅", count: 5 }] },
-  ],
-  "hr-updates": [
-    { id: "m24", user: "Priya Nair", avatar: "PN", role: "Employee", time: "Jun 20, 2026",
-      message: "🎊 Welcome **Deepika K (INT020)** to the AI&DS team! She joins as a Healthcare AI Diagnostics intern. Please give her a warm Code Core welcome and help her get settled in. 🙏",
-      pinned: false, reactions: [{ emoji: "🎊", count: 12 }, { emoji: "🙏", count: 8 }, { emoji: "❤️", count: 5 }] },
-    { id: "m25", user: "Priya Nair", avatar: "PN", role: "Employee", time: "Jun 23, 2026",
-      message: "📊 **Monthly Progress Reports due June 30th.** All mentors must submit intern performance evaluations by then. Interns: ensure your task logs and self-assessments are up to date. Contact hr@codecore.global for queries.",
-      pinned: false, reactions: [{ emoji: "👍", count: 6 }, { emoji: "📋", count: 2 }] },
-    { id: "m26", user: "Admin", avatar: "AD", role: "Admin", time: "Today 9:00 AM",
-      message: "🏆 **Recognition:** Outstanding performance this sprint goes to **Grace Kim (INT007)** — 97% attendance, 91% task completion, and exceptional NLP research quality. Keep it up! ⭐",
-      pinned: false, reactions: [{ emoji: "⭐", count: 15 }, { emoji: "👏", count: 10 }, { emoji: "🏆", count: 7 }] },
-  ],
-  "task-completions": [
-    { id: "m27", user: "System", avatar: "SY", role: "Admin", time: "Jun 22, 2026",
-      message: "✅ **Task Completed** — CC26BUG-001 'Fix Authentication Token Expiry' completed by **Bob Smith (INT002)**. Reviewed by Dr. Smith. Story points: 3sp. Great fix! 🎯",
-      pinned: false, reactions: [{ emoji: "🎯", count: 4 }, { emoji: "✅", count: 3 }] },
-    { id: "m28", user: "System", avatar: "SY", role: "Admin", time: "Jun 23, 2026",
-      message: "✅ **Task Completed** — CC26CR-002 'Database Schema Migration v2' completed by **Bob Smith (INT002)**. Multi-tenant columns added successfully. 3sp delivered.",
-      pinned: false, reactions: [{ emoji: "🚀", count: 3 }] },
-    { id: "m29", user: "System", avatar: "SY", role: "Admin", time: "Today 8:00 AM",
-      message: "🔔 **Task Due Today** — CC26BUG-002 'Payment Module Crash on Submit' assigned to **Diana Prince (INT004)**. Priority: High. Please update status on the sprint board.",
-      pinned: false, reactions: [{ emoji: "⏰", count: 2 }] },
-  ],
+type ApprovalItem = {
+  id: string;
+  icon: React.ElementType;
+  color: string;
+  bg: string;
+  label: string;
+  desc: string;
+  time: string;
 };
 
-const DM_MESSAGES: Record<string, ChatMessage[]> = {
-  "dm-admin": [
-    { id: "dma1", user: "Admin", avatar: "AD", role: "Admin", time: "Today 8:00 AM",
-      message: "👋 Welcome to Code Core PLANWAY! I'm here if you need anything — leave approvals, task queries, sprint updates, or general support.", pinned: false, reactions: [] },
-    { id: "dma2", user: "Admin", avatar: "AD", role: "Admin", time: "Today 8:05 AM",
-      message: "📋 Reminder: All task updates should be reflected on the sprint board. Ping me if you have any blockers!", pinned: false, reactions: [{ emoji: "👍", count: 1 }] },
-  ],
-  "dm-davis": [
-    { id: "dm1", user: "Prof. Davis", avatar: "PD", role: "Employee", time: "Yesterday 3:00 PM",
-      message: "Hey Admin, just finished reviewing the AI model metrics for INT020. F1 score of 0.94 is production-ready. Merging after QA sign-off.", pinned: false, reactions: [] },
-    { id: "dm2", user: "Admin", avatar: "AD", role: "Admin", time: "Yesterday 3:15 PM",
-      message: "Excellent! That's great progress. Can you also check on INT007's NLP model — it's been in Review for 2 days.", pinned: false, reactions: [] },
-    { id: "dm3", user: "Prof. Davis", avatar: "PD", role: "Employee", time: "Today 9:30 AM",
-      message: "Model metrics look great 🎉 Will review INT007 today after standup. Both models should be in Done Story by EOD.", pinned: false, reactions: [{ emoji: "🎉", count: 1 }] },
-  ],
-  "dm-raj": [
-    { id: "dm4", user: "Raj Mehta", avatar: "RM", role: "Employee", time: "Today 10:00 AM",
-      message: "CI runner config is updated on the DevOps repo. INT008 should be able to unblock. Also, S02 infra tickets are ready for planning.", pinned: false, reactions: [] },
-    { id: "dm5", user: "Raj Mehta", avatar: "RM", role: "Employee", time: "Today 10:05 AM",
-      message: "Quick heads up — the staging env will be down for 2 hours tonight (11pm-1am) for routine maintenance.", pinned: false, reactions: [] },
-  ],
-  "dm-grace": [
-    { id: "dm6", user: "Grace Kim", avatar: "GK", role: "Intern", time: "Today 9:00 AM",
-      message: "@you BERT model at 91% accuracy on the validation set! Can we discuss deployment strategy in our next 1:1?", pinned: false, reactions: [{ emoji: "🔥", count: 1 }] },
-    { id: "dm7", user: "Grace Kim", avatar: "GK", role: "Intern", time: "Today 9:05 AM",
-      message: "Also — attended the NLP conference last week. Lots of inspiration for the next sprint. Sharing notes!", pinned: false, reactions: [] },
-    { id: "dm8", user: "Grace Kim", avatar: "GK", role: "Intern", time: "Today 9:10 AM",
-      message: "CC26IPM-002 is in Review status now. PR #52 is up. Would love your feedback 🙏", pinned: false, reactions: [] },
-  ],
+type RecentActivity = {
+  icon: React.ElementType;
+  color: string;
+  text: string;
+  time: string;
 };
 
-const PENDING_APPROVALS = [
-  { id: "pa1", type: "leave",   icon: CalendarDays,   color: "text-orange-500", bg: "bg-orange-50",  label: "Leave Request", desc: "Karen Lee — Sick leave Jun 26",      time: "Just now" },
-  { id: "pa2", type: "leave",   icon: CalendarDays,   color: "text-orange-500", bg: "bg-orange-50",  label: "Leave Request", desc: "James Moore — Casual Jul 3",         time: "1h ago"   },
-  { id: "pa3", type: "sprint",  icon: Kanban,         color: "text-purple-500", bg: "bg-purple-50",  label: "Blocked Story", desc: "CC26EPIC-002 needs unblocking",       time: "2h ago"   },
-  { id: "pa4", type: "task",    icon: AlertTriangle,  color: "text-red-500",    bg: "bg-red-50",     label: "Overdue Task",  desc: "CC26BUG-002 — due today",            time: "3h ago"   },
-];
-
-const RECENT_ACTIVITIES = [
-  { icon: CheckCircle2, color: "text-green-500",  text: "Alice Johnson's leave approved",   time: "9:05 AM"   },
-  { icon: CheckCircle2, color: "text-green-500",  text: "CC26BUG-001 marked Done Story",    time: "Yesterday" },
-  { icon: Users,        color: "text-blue-500",   text: "Deepika K joined AI&DS team",      time: "Jun 20"    },
-  { icon: Zap,          color: "text-yellow-500", text: "Sprint S01 started",               time: "Jun 16"    },
-  { icon: CheckCircle2, color: "text-green-500",  text: "DB Migration v2 completed",        time: "Jun 23"    },
-];
+const PENDING_APPROVALS: ApprovalItem[] = [];
+const RECENT_ACTIVITIES: RecentActivity[] = [];
 
 function statusDot(status: UserStatus) {
   const map: Record<UserStatus, string> = {
@@ -251,25 +173,91 @@ function avatarBg(role: "Admin" | "Employee" | "Intern") {
 }
 
 function getRoleInfo() {
-  const r = localStorage.getItem("role") ?? "admin";
-  const label     = r === "student" ? "Intern" : r === "staff" ? "Employee" : "Admin";
-  const msgRole   = r === "student" ? "Intern" : r === "staff" ? "Employee" : "Admin";
-  const msgUser   = r === "student" ? "Intern User" : r === "staff" ? "Employee User" : "Admin";
-  const msgAvatar = r === "student" ? "IN" : r === "staff" ? "EM" : "AD";
-  return { raw: r, label, msgRole, msgUser, msgAvatar } as const;
+  const session = getAuthSession();
+  const r: NavigationRole = session ? roleToNavigationRole(session.user.role) : "intern";
+  const label     = r === "intern" ? "Intern" : r === "employee" ? "Employee" : "Admin";
+  const msgRole   = r === "intern" ? "Intern" : r === "employee" ? "Employee" : "Admin";
+  const msgUser   = session?.user.fullName ?? (r === "intern" ? "Intern User" : r === "employee" ? "Employee User" : "Admin");
+  const userId    = session?.user.userId ?? "";
+  const msgAvatar = session?.user.fullName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join("")
+    .toUpperCase() || (r === "intern" ? "IN" : r === "employee" ? "EM" : "AD");
+  const msgAvatarUrl = session?.user.avatarUrl ?? null;
+  return { raw: r, label, msgRole, msgUser, msgAvatar, msgAvatarUrl, userId } as const;
 }
 
 type RoleMsgRole = "Admin" | "Employee" | "Intern";
 
-function getVisibleDms(rawRole: string): DmUser[] {
-  if (rawRole === "student") return DM_USERS.filter(d => d.role === "Admin");
-  if (rawRole === "staff")   return DM_USERS.filter(d => d.role === "Admin" || d.role === "Employee");
-  return DM_USERS;
+function getVisibleDms(rawRole: string, users: DmUser[]): DmUser[] {
+  if (rawRole === "intern") return users.filter(d => d.role === "Admin");
+  if (rawRole === "employee") return users.filter(d => d.role === "Admin" || d.role === "Employee");
+  return users;
 }
 
-interface MessageBubbleProps { msg: ChatMessage; onReact: (msgId: string, emoji: string) => void; isSelf?: boolean; }
-function MessageBubble({ msg, onReact, isSelf }: MessageBubbleProps) {
+async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const session = getAuthSession();
+  if (!session) throw new Error("Your session has expired. Please log in again.");
+
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${session.token}`);
+  if (init.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json; charset=utf-8");
+  }
+
+  const response = await fetch(`/api${path}`, { ...init, headers });
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(payload?.message ?? payload?.error ?? "Chat request failed.");
+  }
+
+  return payload as T;
+}
+
+function conversationOtherUserId(directKey: string, selfUserId: string) {
+  return directKey.split(":").find(id => id !== selfUserId) ?? "";
+}
+
+function upsertMessage(map: Record<string, ChatMessage[]>, message: ChatMessage) {
+  const conversationId = message.conversationId;
+  if (!conversationId) return map;
+
+  const existing = map[conversationId] ?? [];
+  const next = existing.some(item => item.id === message.id)
+    ? existing.map(item => item.id === message.id ? message : item)
+    : [...existing, message];
+
+  return {
+    ...map,
+    [conversationId]: next.sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return aTime - bTime || a.id.localeCompare(b.id);
+    }),
+  };
+}
+
+interface MessageBubbleProps {
+  msg: ChatMessage;
+  onReact: (msgId: string, emoji: string) => void;
+  onCopy: (message: ChatMessage) => Promise<void>;
+  isSelf?: boolean;
+}
+function MessageBubble({ msg, onReact, onCopy, isSelf }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyMessage = async () => {
+    await onCopy(msg);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+    setShowMore(false);
+  };
 
   return (
     <motion.div
@@ -280,6 +268,7 @@ function MessageBubble({ msg, onReact, isSelf }: MessageBubbleProps) {
       onMouseLeave={() => setShowActions(false)}
     >
       <Avatar className="h-8 w-8 shrink-0 mt-0.5">
+        {msg.avatarUrl && <AvatarImage src={msg.avatarUrl} alt={msg.user} />}
         <AvatarFallback className={cn("text-[10px] font-bold", avatarBg(msg.role))}>{msg.avatar}</AvatarFallback>
       </Avatar>
 
@@ -307,6 +296,15 @@ function MessageBubble({ msg, onReact, isSelf }: MessageBubbleProps) {
             : "bg-muted text-foreground rounded-tl-sm"
         )}>
           {msg.message}
+          {msg.attachment && (
+            <div className={cn(
+              "mt-2 flex items-center gap-2 rounded-lg border px-2 py-1 text-xs",
+              isSelf ? "border-primary-foreground/30 bg-primary-foreground/10" : "border-border bg-background/70"
+            )}>
+              <Paperclip size={12} />
+              <span className="max-w-[220px] truncate">{msg.attachment.name}</span>
+            </div>
+          )}
         </div>
 
         {msg.reactions.length > 0 && (
@@ -341,9 +339,35 @@ function MessageBubble({ msg, onReact, isSelf }: MessageBubbleProps) {
               <button key={e} onClick={() => onReact(msg.id, e)}
                 className="text-sm p-1 rounded-lg hover:bg-muted transition-colors">{e}</button>
             ))}
-            <button className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-              <MoreHorizontal size={14} />
+            <button
+              onClick={copyMessage}
+              className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+              aria-label="Copy message"
+              title="Copy message"
+            >
+              {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
             </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowMore(v => !v)}
+                className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                aria-label="More message options"
+                title="More message options"
+              >
+                <MoreHorizontal size={14} />
+              </button>
+              {showMore && (
+                <div className="absolute right-0 top-7 z-20 min-w-28 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
+                  <button
+                    onClick={copyMessage}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
+                  >
+                    {copied ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -353,26 +377,42 @@ function MessageBubble({ msg, onReact, isSelf }: MessageBubbleProps) {
 
 export default function CommandCenter() {
   const roleInfo   = getRoleInfo();
-  const visibleDms = getVisibleDms(roleInfo.raw);
 
-  const [activeChannel, setActiveChannel]   = useState("announcements");
+  const [channels, setChannels]             = useState<Channel[]>(CHANNELS);
+  const [dmUsers, setDmUsers]               = useState<DmUser[]>([]);
+  const visibleDms                          = getVisibleDms(roleInfo.raw, dmUsers);
+  const [activeChannel, setActiveChannel]   = useState("channel:announcements");
   const [activeDm, setActiveDm]             = useState<string | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState("channel:announcements");
+  const [directConversationIds, setDirectConversationIds] = useState<Record<string, string>>({});
   const [channelsOpen, setChannelsOpen]     = useState(true);
   const [dmsOpen, setDmsOpen]               = useState(true);
   const [msgInput, setMsgInput]             = useState("");
   const [search, setSearch]                 = useState("");
-  const [messages, setMessages]             = useState(CHANNEL_MESSAGES);
-  const [dmMessages, setDmMessages]         = useState(DM_MESSAGES);
+  const [messages, setMessages]             = useState<Record<string, ChatMessage[]>>({});
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sending, setSending]               = useState(false);
+  const [connectionState, setConnectionState] = useState("Connecting");
   const [approvals, setApprovals]           = useState(PENDING_APPROVALS);
   const [showRightPanel, setShowRightPanel] = useState(true);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showMentionPicker, setShowMentionPicker] = useState(false);
+  const [showComposerMore, setShowComposerMore] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<ChatAttachment | null>(null);
+  const [conversationMembers, setConversationMembers] = useState<Record<string, DmUser[]>>({});
+  const [activeCall, setActiveCall] = useState<{ mode: "phone" | "video"; name: string } | null>(null);
+  const [callError, setCallError] = useState("");
   const scrollRef                           = useRef<HTMLDivElement>(null);
+  const inputRef                            = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef                        = useRef<HTMLInputElement>(null);
+  const mediaStreamRef                      = useRef<MediaStream | null>(null);
+  const videoRef                            = useRef<HTMLVideoElement>(null);
+  const requestedConversationId             = useRef(new URLSearchParams(window.location.search).get("conversation"));
 
-  const currentChannel = CHANNELS.find(c => c.id === activeChannel);
+  const currentChannel = channels.find(c => c.id === activeChannel);
   const currentDm      = visibleDms.find(d => d.id === activeDm);
 
-  const currentMessages: ChatMessage[] = activeDm
-    ? (dmMessages[activeDm] ?? [])
-    : (messages[activeChannel] ?? []);
+  const currentMessages: ChatMessage[] = messages[activeConversationId] ?? [];
 
   const filteredMessages = search
     ? currentMessages.filter(m =>
@@ -382,75 +422,432 @@ export default function CommandCenter() {
     : currentMessages;
 
   const pinnedMessages = currentMessages.filter(m => m.pinned);
+  const mentionCandidates = (conversationMembers[activeConversationId] ?? [])
+    .filter(member => member.id !== roleInfo.userId);
+  const quickEmojis = ["😀", "😂", "👍", "❤️", "🎉", "🙏", "🔥", "✅", "🙌", "👏"];
+
+  const clearConversationUnread = useCallback((conversationId: string) => {
+    setChannels(prev => prev.map(channel =>
+      channel.id === conversationId ? { ...channel, unread: 0 } : channel
+    ));
+
+    const dmUserId = Object.entries(directConversationIds).find(([, id]) => id === conversationId)?.[0];
+    if (dmUserId) {
+      setDmUsers(prev => prev.map(user =>
+        user.id === dmUserId ? { ...user, unread: 0 } : user
+      ));
+    }
+  }, [directConversationIds]);
+
+  const incrementConversationUnread = useCallback((conversationId: string) => {
+    setChannels(prev => prev.map(channel =>
+      channel.id === conversationId ? { ...channel, unread: channel.unread + 1 } : channel
+    ));
+
+    const dmUserId = Object.entries(directConversationIds).find(([, id]) => id === conversationId)?.[0];
+    if (dmUserId) {
+      setDmUsers(prev => prev.map(user =>
+        user.id === dmUserId ? { ...user, unread: user.unread + 1 } : user
+      ));
+    }
+  }, [directConversationIds]);
+
+  const markConversationRead = useCallback(async (conversationId: string) => {
+    clearConversationUnread(conversationId);
+    try {
+      await apiJson<{ totalUnread: number }>(`/chat/conversations/${encodeURIComponent(conversationId)}/read`, {
+        method: "POST",
+      });
+      window.dispatchEvent(new CustomEvent("chat:read"));
+    } catch (error) {
+      console.error("Chat read marker failed", error);
+    }
+  }, [clearConversationUnread]);
+
+  const updateConversationPreview = useCallback((message: ChatMessage) => {
+    if (!message.conversationId) return;
+    setChannels(prev => prev.map(channel =>
+      channel.id === message.conversationId
+        ? { ...channel, lastMessage: message.message, lastMessageAt: message.createdAt ?? null }
+        : channel
+    ));
+
+    const dmUserId = Object.entries(directConversationIds).find(([, id]) => id === message.conversationId)?.[0];
+    if (dmUserId) {
+      setDmUsers(prev => prev.map(user =>
+        user.id === dmUserId ? { ...user, lastMessage: message.message } : user
+      ));
+    }
+  }, [directConversationIds]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [activeChannel, activeDm, filteredMessages.length]);
+  }, [activeConversationId, filteredMessages.length]);
 
-  const handleSend = () => {
-    if (!msgInput.trim()) return;
-    const newMsg: ChatMessage = {
-      id:       `new-${Date.now()}`,
-      user:     roleInfo.msgUser,
-      avatar:   roleInfo.msgAvatar,
-      role:     roleInfo.msgRole as RoleMsgRole,
-      time:     new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      message:  msgInput.trim(),
-      pinned:   false,
-      reactions: [],
+  useEffect(() => {
+    let cancelled = false;
+
+    apiJson<BootstrapResponse>("/chat/bootstrap")
+      .then(payload => {
+        if (cancelled) return;
+
+        const nextChannels = payload.channels.map(channel => ({
+          id: channel.id,
+          name: channel.name,
+          icon: CHANNEL_ICON_MAP[channel.icon ?? "Hash"] ?? Hash,
+          unread: channel.unread ?? 0,
+          description: channel.description,
+          members: channel.members ?? 0,
+          pinCount: 0,
+          lastMessage: channel.lastMessage,
+          lastMessageAt: channel.lastMessageAt ?? null,
+        }));
+
+        const directMap: Record<string, string> = {};
+        const directLastMessages: Record<string, string> = {};
+        payload.directConversations.forEach(conversation => {
+          const otherUserId = conversationOtherUserId(conversation.directKey, roleInfo.userId);
+          if (otherUserId) {
+            directMap[otherUserId] = conversation.id;
+            directLastMessages[otherUserId] = conversation.lastMessage || "No messages yet";
+          }
+        });
+
+        const firstChannelId = nextChannels[0]?.id ?? "channel:announcements";
+        setChannels(nextChannels.length ? nextChannels : CHANNELS);
+        setActiveChannel(prev => nextChannels.some(channel => channel.id === prev) ? prev : firstChannelId);
+        setActiveConversationId(prev => prev && prev !== "channel:announcements" ? prev : firstChannelId);
+        setDmUsers(payload.users.map(user => ({
+          id: user.id,
+          name: user.name,
+          avatar: user.avatar,
+          avatarUrl: user.avatarUrl ?? null,
+          role: user.role,
+          status: user.status ?? "offline",
+          unread: user.unread ?? 0,
+          lastMessage: directLastMessages[user.id] ?? "No messages yet",
+          phone: user.phone,
+        })));
+        setDirectConversationIds(directMap);
+
+        const requested = requestedConversationId.current;
+        if (requested) {
+          requestedConversationId.current = null;
+          if (nextChannels.some(channel => channel.id === requested)) {
+            setActiveChannel(requested);
+            setActiveDm(null);
+            setActiveConversationId(requested);
+          } else {
+            const dmEntry = Object.entries(directMap).find(([, conversationId]) => conversationId === requested);
+            if (dmEntry) {
+              setActiveDm(dmEntry[0]);
+              setActiveChannel("");
+            }
+            setActiveConversationId(requested);
+          }
+        }
+      })
+      .catch(error => {
+        console.error("Chat bootstrap failed", error);
+        setConnectionState("Offline");
+      });
+
+    return () => {
+      cancelled = true;
     };
-    if (activeDm) {
-      setDmMessages(prev => ({ ...prev, [activeDm]: [...(prev[activeDm] ?? []), newMsg] }));
-    } else {
-      setMessages(prev => ({ ...prev, [activeChannel]: [...(prev[activeChannel] ?? []), newMsg] }));
+  }, [roleInfo.userId]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    let cancelled = false;
+    setLoadingMessages(true);
+
+    apiJson<{ messages: ChatMessage[] }>(`/chat/conversations/${encodeURIComponent(activeConversationId)}/messages?limit=50`)
+      .then(payload => {
+        if (cancelled) return;
+        setMessages(prev => ({ ...prev, [activeConversationId]: payload.messages }));
+        void markConversationRead(activeConversationId);
+      })
+      .catch(error => {
+        console.error("Chat message load failed", error);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMessages(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversationId, markConversationRead]);
+
+  useEffect(() => {
+    setConnectionState("Live");
+
+    const onPresence = (event: Event) => {
+      const presence = (event as CustomEvent<{ userId?: string; online?: boolean }>).detail;
+      if (!presence.userId) return;
+      setDmUsers(prev => prev.map(user =>
+        user.id === presence.userId
+          ? { ...user, status: presence.online ? "online" : "offline" }
+          : user
+      ));
+    };
+
+    const onMessage = (event: Event) => {
+      const message = (event as CustomEvent<ChatMessage>).detail;
+      setMessages(prev => upsertMessage(prev, message));
+      updateConversationPreview(message);
+
+      if (message.senderId === roleInfo.userId || !message.conversationId) return;
+      if (message.conversationId === activeConversationId) {
+        void markConversationRead(message.conversationId);
+      } else {
+        incrementConversationUnread(message.conversationId);
+      }
+    };
+
+    const onReaction = (event: Event) => {
+      const message = (event as CustomEvent<ChatMessage>).detail;
+      setMessages(prev => upsertMessage(prev, message));
+    };
+
+    window.addEventListener("chat:message", onMessage);
+    window.addEventListener("chat:reaction", onReaction);
+    window.addEventListener("chat:presence", onPresence);
+
+    return () => {
+      window.removeEventListener("chat:message", onMessage);
+      window.removeEventListener("chat:reaction", onReaction);
+      window.removeEventListener("chat:presence", onPresence);
+    };
+  }, [activeConversationId, incrementConversationUnread, markConversationRead, roleInfo.userId, updateConversationPreview]);
+
+  useEffect(() => {
+    if (!activeConversationId || conversationMembers[activeConversationId]) return;
+    let cancelled = false;
+
+    apiJson<ConversationMembersResponse>(`/chat/conversations/${encodeURIComponent(activeConversationId)}/members`)
+      .then(payload => {
+        if (cancelled) return;
+        setConversationMembers(prev => ({
+          ...prev,
+          [activeConversationId]: payload.members.map(member => ({
+            id: member.id,
+            name: member.name,
+            avatar: member.avatar,
+            avatarUrl: member.avatarUrl ?? null,
+            role: member.role,
+            status: member.status ?? "offline",
+            unread: 0,
+            lastMessage: "",
+            phone: member.phone,
+          })),
+        }));
+      })
+      .catch(error => {
+        console.error("Chat members load failed", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversationId, conversationMembers]);
+
+  useEffect(() => {
+    if (videoRef.current && mediaStreamRef.current) {
+      videoRef.current.srcObject = mediaStreamRef.current;
     }
-    setMsgInput("");
+  }, [activeCall]);
+
+  const insertComposerText = useCallback((text: string) => {
+    const input = inputRef.current;
+    const start = input?.selectionStart ?? msgInput.length;
+    const end = input?.selectionEnd ?? msgInput.length;
+    const next = `${msgInput.slice(0, start)}${text}${msgInput.slice(end)}`;
+    setMsgInput(next);
+    window.requestAnimationFrame(() => {
+      input?.focus();
+      const cursor = start + text.length;
+      input?.setSelectionRange(cursor, cursor);
+    });
+  }, [msgInput]);
+
+  const handleCopyMessage = async (message: ChatMessage) => {
+    if (!message.message) return;
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(message.message);
+      return;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = message.message;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
   };
 
-  const handleReact = (msgId: string, emoji: string) => {
-    const updater = (msgs: ChatMessage[]) => msgs.map(m => {
-      if (m.id !== msgId) return m;
-      const existing = m.reactions.find(r => r.emoji === emoji);
-      if (existing) {
-        return { ...m, reactions: m.reactions.map(r =>
-          r.emoji === emoji
-            ? { ...r, count: r.reacted ? r.count - 1 : r.count + 1, reacted: !r.reacted }
-            : r
-        ).filter(r => r.count > 0) };
-      }
-      return { ...m, reactions: [...m.reactions, { emoji, count: 1, reacted: true }] };
+  const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setSelectedAttachment({
+      name: file.name,
+      size: file.size,
+      type: file.type || "application/octet-stream",
+      lastModified: file.lastModified,
     });
-    if (activeDm) setDmMessages(prev => ({ ...prev, [activeDm]: updater(prev[activeDm] ?? []) }));
-    else          setMessages(prev => ({ ...prev, [activeChannel]: updater(prev[activeChannel] ?? []) }));
+    event.target.value = "";
+  };
+
+  const stopActiveCall = () => {
+    mediaStreamRef.current?.getTracks().forEach(track => track.stop());
+    mediaStreamRef.current = null;
+    setActiveCall(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      mediaStreamRef.current?.getTracks().forEach(track => track.stop());
+    };
+  }, []);
+
+  const startCall = async (mode: "phone" | "video") => {
+    if (!currentDm) return;
+    setCallError("");
+
+    if (mode === "phone" && currentDm.phone) {
+      window.location.href = `tel:${currentDm.phone}`;
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCallError("Calls are not supported by this browser.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: mode === "video",
+      });
+      mediaStreamRef.current = stream;
+      setActiveCall({ mode, name: currentDm.name });
+    } catch (error) {
+      console.error("Chat call failed", error);
+      setCallError("Unable to start the call from this browser.");
+    }
+  };
+
+  const handleSend = async () => {
+    const body = msgInput.trim();
+    if ((!body && !selectedAttachment) || !activeConversationId || sending) return;
+
+    setSending(true);
+    try {
+      const clientMessageId = crypto.randomUUID?.() ?? `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const payload = await apiJson<{ message: ChatMessage }>(
+        `/chat/conversations/${encodeURIComponent(activeConversationId)}/messages`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            message: body,
+            clientMessageId,
+            attachment: selectedAttachment,
+            messageType: selectedAttachment ? "attachment" : "text",
+          }),
+        },
+      );
+      setMessages(prev => upsertMessage(prev, payload.message));
+      updateConversationPreview(payload.message);
+      setMsgInput("");
+      setSelectedAttachment(null);
+    } catch (error) {
+      console.error("Chat send failed", error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleReact = async (msgId: string, emoji: string) => {
+    try {
+      const payload = await apiJson<{ message: ChatMessage }>(
+        `/chat/messages/${encodeURIComponent(msgId)}/reactions`,
+        {
+          method: "POST",
+          body: JSON.stringify({ emoji }),
+        },
+      );
+      setMessages(prev => upsertMessage(prev, payload.message));
+    } catch (error) {
+      console.error("Chat reaction failed", error);
+    }
   };
 
   const dismissApproval = (id: string) => setApprovals(prev => prev.filter(a => a.id !== id));
 
-  const totalUnread = CHANNELS.reduce((a, c) => a + c.unread, 0) + DM_USERS.reduce((a, d) => a + d.unread, 0);
+  const totalUnread = channels.reduce((a, c) => a + c.unread, 0) + visibleDms.reduce((a, d) => a + d.unread, 0);
 
-  const selectChannel = (id: string) => { setActiveChannel(id); setActiveDm(null); };
-  const selectDm      = (id: string) => { setActiveDm(id); };
+  const selectChannel = (id: string) => {
+    setActiveChannel(id);
+    setActiveDm(null);
+    setActiveConversationId(id);
+    void markConversationRead(id);
+  };
+
+  const selectDm = async (id: string) => {
+    setActiveDm(id);
+    setActiveChannel("");
+    const existingConversationId = directConversationIds[id];
+    if (existingConversationId) {
+      setActiveConversationId(existingConversationId);
+      void markConversationRead(existingConversationId);
+      return;
+    }
+
+    try {
+      const payload = await apiJson<{ conversation: { id: string } }>("/chat/conversations/direct", {
+        method: "POST",
+        body: JSON.stringify({ targetUserId: id }),
+      });
+      setDirectConversationIds(prev => ({ ...prev, [id]: payload.conversation.id }));
+      setActiveConversationId(payload.conversation.id);
+      void markConversationRead(payload.conversation.id);
+    } catch (error) {
+      console.error("Direct conversation setup failed", error);
+    }
+  };
 
   const lastChannelMsg = (id: string) => {
-    const msgs = CHANNEL_MESSAGES[id] ?? [];
-    return msgs[msgs.length - 1]?.message.slice(0, 42) ?? "No messages yet";
+    const msgs = messages[id] ?? [];
+    const channel = channels.find(ch => ch.id === id);
+    return msgs[msgs.length - 1]?.message.slice(0, 42) ?? channel?.lastMessage?.slice(0, 42) ?? "No messages yet";
   };
 
   const lastChannelTime = (id: string) => {
-    const msgs = CHANNEL_MESSAGES[id] ?? [];
-    return msgs[msgs.length - 1]?.time.split(" ").slice(-2).join(" ") ?? "";
+    const msgs = messages[id] ?? [];
+    const channel = channels.find(ch => ch.id === id);
+    if (msgs.length) return msgs[msgs.length - 1]?.time.split(" ").slice(-2).join(" ") ?? "";
+    if (!channel?.lastMessageAt) return "";
+    return new Date(channel.lastMessageAt).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "Asia/Kolkata",
+    });
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-0 overflow-hidden rounded-xl border border-border shadow-sm bg-background">
+    <div className="flex h-[calc(100vh-6rem)] min-h-[640px] gap-0 overflow-hidden bg-background">
 
       {/* ══════════════════════════════════════════════════════════
           LEFT PANEL — WhatsApp-style conversation list
       ══════════════════════════════════════════════════════════ */}
-      <div className="w-[300px] shrink-0 flex flex-col border-r bg-card overflow-hidden">
+      <div className="w-[300px] shrink-0 flex flex-col border-r bg-background overflow-hidden">
 
         {/* Header */}
-        <div className="px-4 py-3 border-b bg-muted/40 shrink-0">
+        <div className="px-4 py-3 border-b bg-background shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
@@ -459,8 +856,8 @@ export default function CommandCenter() {
                 </AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-bold text-sm leading-tight">Command Center</p>
-                <p className="text-[10px] text-muted-foreground">Code Core IMS · {roleInfo.label}</p>
+                <p className="font-bold text-sm leading-tight">Chat Center</p>
+                <p className="text-[10px] text-muted-foreground">{connectionState}</p>
               </div>
             </div>
             {totalUnread > 0 && (
@@ -502,7 +899,7 @@ export default function CommandCenter() {
             <AnimatePresence initial={false}>
               {channelsOpen && (
                 <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
-                  {CHANNELS.map(ch => {
+                  {channels.map(ch => {
                     const Icon     = ch.icon;
                     const isActive = !activeDm && activeChannel === ch.id;
                     return (
@@ -510,8 +907,10 @@ export default function CommandCenter() {
                         key={ch.id}
                         onClick={() => selectChannel(ch.id)}
                         className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2.5 transition-colors border-b border-border/40",
-                          isActive ? "bg-primary/8" : "hover:bg-muted/60"
+                          "w-[calc(100%-0.5rem)] mx-1 mb-1 flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                          isActive
+                            ? "border-primary/40 bg-primary/8 shadow-sm"
+                            : "border-border/60 hover:border-primary/30 hover:bg-muted/60"
                         )}
                       >
                         {/* Channel icon avatar */}
@@ -557,7 +956,7 @@ export default function CommandCenter() {
               Direct Messages
             </button>
 
-            {roleInfo.raw === "student" && (
+            {roleInfo.raw === "intern" && (
               <p className="text-[10px] text-amber-600 px-4 pb-1">Interns can only message Admin.</p>
             )}
 
@@ -571,13 +970,16 @@ export default function CommandCenter() {
                         key={dm.id}
                         onClick={() => selectDm(dm.id)}
                         className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2.5 transition-colors border-b border-border/40",
-                          isActive ? "bg-primary/8" : "hover:bg-muted/60"
+                          "w-[calc(100%-0.5rem)] mx-1 mb-1 flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                          isActive
+                            ? "border-primary/40 bg-primary/8 shadow-sm"
+                            : "border-border/60 hover:border-primary/30 hover:bg-muted/60"
                         )}
                       >
                         {/* Avatar with status dot */}
                         <div className="relative shrink-0">
                           <Avatar className="h-10 w-10">
+                            {dm.avatarUrl && <AvatarImage src={dm.avatarUrl} alt={dm.name} />}
                             <AvatarFallback className={cn("text-xs font-bold",
                               dm.role === "Admin"    ? "bg-purple-100 text-purple-700" :
                               dm.role === "Employee" ? "bg-blue-100 text-blue-700"     : "bg-emerald-100 text-emerald-700"
@@ -617,12 +1019,13 @@ export default function CommandCenter() {
       <div className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden">
 
         {/* Chat header */}
-        <div className="px-4 py-3 border-b flex items-center justify-between shrink-0 bg-card">
+        <div className="px-4 py-3 border-b flex items-center justify-between shrink-0 bg-background">
           <div className="flex items-center gap-3">
             {activeDm ? (
               <>
                 <div className="relative">
                   <Avatar className="h-9 w-9">
+                    {currentDm?.avatarUrl && <AvatarImage src={currentDm.avatarUrl} alt={currentDm.name} />}
                     <AvatarFallback className={cn("text-xs font-bold",
                       currentDm?.role === "Admin"    ? "bg-purple-100 text-purple-700" :
                       currentDm?.role === "Employee" ? "bg-blue-100 text-blue-700"     : "bg-emerald-100 text-emerald-700"
@@ -651,8 +1054,24 @@ export default function CommandCenter() {
           <div className="flex items-center gap-1">
             {activeDm && (
               <>
-                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg"><Phone size={15} /></Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg"><Video size={15} /></Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg"
+                  onClick={() => startCall("phone")}
+                  title="Phone call"
+                >
+                  <Phone size={15} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg"
+                  onClick={() => startCall("video")}
+                  title="Video call"
+                >
+                  <Video size={15} />
+                </Button>
               </>
             )}
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setShowRightPanel(v => !v)}>
@@ -660,6 +1079,34 @@ export default function CommandCenter() {
             </Button>
           </div>
         </div>
+
+        {(activeCall || callError) && (
+          <div className="border-b bg-muted/40 px-4 py-2 text-xs">
+            {activeCall ? (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  {activeCall.mode === "video" ? <Video size={14} className="text-primary" /> : <Phone size={14} className="text-primary" />}
+                  <span className="truncate font-medium">
+                    {activeCall.mode === "video" ? "Video call" : "Phone call"} with {activeCall.name}
+                  </span>
+                </div>
+                <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={stopActiveCall}>
+                  End
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3 text-destructive">
+                <span>{callError}</span>
+                <button onClick={() => setCallError("")} className="rounded p-1 hover:bg-muted">
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+            {activeCall?.mode === "video" && (
+              <video ref={videoRef} autoPlay muted playsInline className="mt-2 h-28 w-44 rounded-lg bg-black object-cover" />
+            )}
+          </div>
+        )}
 
         {/* Channel description banner */}
         {!activeDm && currentChannel && (
@@ -671,7 +1118,12 @@ export default function CommandCenter() {
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto py-3 space-y-1">
-          {filteredMessages.length === 0 ? (
+          {loadingMessages ? (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+              <MessageSquare size={40} className="opacity-20" />
+              <p className="text-sm">Loading messages...</p>
+            </div>
+          ) : filteredMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
               <MessageSquare size={40} className="opacity-20" />
               <p className="text-sm">{search ? `No messages matching "${search}"` : "No messages yet. Start the conversation!"}</p>
@@ -682,36 +1134,164 @@ export default function CommandCenter() {
                 key={msg.id}
                 msg={msg}
                 onReact={handleReact}
-                isSelf={msg.avatar === roleInfo.msgAvatar}
+                onCopy={handleCopyMessage}
+                isSelf={msg.senderId === roleInfo.userId}
               />
             ))
           )}
         </div>
 
         {/* Input bar */}
-        <div className="px-4 py-3 border-t bg-card shrink-0">
-          <div className="flex items-end gap-2 bg-muted/60 rounded-2xl px-4 py-2.5 border border-border/60">
+        <div className="px-4 py-3 border-t bg-background shrink-0">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelected}
+          />
+          {selectedAttachment && (
+            <div className="mb-2 flex w-fit max-w-full items-center gap-2 rounded-lg border bg-muted/60 px-3 py-1.5 text-xs">
+              <Paperclip size={13} />
+              <span className="max-w-[320px] truncate">{selectedAttachment.name}</span>
+              <button onClick={() => setSelectedAttachment(null)} className="rounded p-0.5 hover:bg-muted" aria-label="Remove attachment">
+                <X size={12} />
+              </button>
+            </div>
+          )}
+          <div className="relative flex min-w-0 items-end gap-2 bg-muted/60 rounded-2xl px-4 py-2.5 border border-border/60">
             <Textarea
+              ref={inputRef}
               placeholder={activeDm ? `Message ${currentDm?.name}…` : `Message #${currentChannel?.name}…`}
               value={msgInput}
               onChange={e => setMsgInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              className="flex-1 bg-transparent border-none shadow-none resize-none text-sm min-h-[36px] max-h-[120px] p-0 focus-visible:ring-0 placeholder:text-muted-foreground/60"
+              className="min-w-0 flex-1 box-border bg-transparent border-none shadow-none resize-none text-sm leading-5 min-h-[36px] max-h-[120px] px-1.5 py-1 focus-visible:ring-0 placeholder:text-muted-foreground/60"
               rows={1}
             />
             <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
-              <button className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"><Paperclip size={15} /></button>
-              <button className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"><AtSign size={15} /></button>
-              <button className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"><Smile size={15} /></button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+                aria-label="Attach file"
+                title="Attach file"
+              >
+                <Paperclip size={15} />
+              </button>
+              <button
+                onClick={() => {
+                  setShowMentionPicker(v => !v);
+                  setShowEmojiPicker(false);
+                  setShowComposerMore(false);
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+                aria-label="Mention"
+                title="Mention"
+              >
+                <AtSign size={15} />
+              </button>
+              <button
+                onClick={() => {
+                  setShowEmojiPicker(v => !v);
+                  setShowMentionPicker(false);
+                  setShowComposerMore(false);
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+                aria-label="Emoji"
+                title="Emoji"
+              >
+                <Smile size={15} />
+              </button>
+              <button
+                onClick={() => {
+                  setShowComposerMore(v => !v);
+                  setShowEmojiPicker(false);
+                  setShowMentionPicker(false);
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+                aria-label="More options"
+                title="More options"
+              >
+                <MoreHorizontal size={15} />
+              </button>
               <Button
                 size="icon"
                 className="h-8 w-8 rounded-xl"
                 onClick={handleSend}
-                disabled={!msgInput.trim()}
+                disabled={(!msgInput.trim() && !selectedAttachment) || sending || !activeConversationId}
               >
                 <Send size={14} />
               </Button>
             </div>
+            {showEmojiPicker && (
+              <div className="absolute bottom-14 right-16 z-20 grid grid-cols-5 gap-1 rounded-xl border bg-popover p-2 text-popover-foreground shadow-md">
+                {quickEmojis.map(emoji => (
+                  <button
+                    key={emoji}
+                    onClick={() => {
+                      insertComposerText(emoji);
+                      setShowEmojiPicker(false);
+                    }}
+                    className="rounded-lg p-1.5 text-lg hover:bg-muted"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+            {showMentionPicker && (
+              <div className="absolute bottom-14 right-10 z-20 max-h-56 w-64 overflow-y-auto rounded-xl border bg-popover p-1 text-popover-foreground shadow-md">
+                {mentionCandidates.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-muted-foreground">No members available</p>
+                ) : mentionCandidates.map(member => (
+                  <button
+                    key={member.id}
+                    onClick={() => {
+                      insertComposerText(`@${member.name} `);
+                      setShowMentionPicker(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-muted"
+                  >
+                    <Avatar className="h-6 w-6">
+                      {member.avatarUrl && <AvatarImage src={member.avatarUrl} alt={member.name} />}
+                      <AvatarFallback className={cn("text-[9px] font-bold", avatarBg(member.role))}>{member.avatar}</AvatarFallback>
+                    </Avatar>
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium">{member.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{member.role}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {showComposerMore && (
+              <div className="absolute bottom-14 right-2 z-20 w-44 rounded-xl border bg-popover p-1 text-popover-foreground shadow-md">
+                <button
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setShowComposerMore(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs hover:bg-muted"
+                >
+                  <Paperclip size={13} /> Attach file
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMentionPicker(true);
+                    setShowComposerMore(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs hover:bg-muted"
+                >
+                  <AtSign size={13} /> Mention
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEmojiPicker(true);
+                    setShowComposerMore(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs hover:bg-muted"
+                >
+                  <Smile size={13} /> Emoji
+                </button>
+              </div>
+            )}
           </div>
           <p className="text-[10px] text-muted-foreground mt-1.5 ml-1">
             <kbd className="bg-muted px-1 rounded text-[9px]">Enter</kbd> to send ·{" "}
@@ -731,7 +1311,7 @@ export default function CommandCenter() {
             animate={{ width: 272, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="shrink-0 border-l bg-card flex flex-col overflow-hidden"
+            className="shrink-0 border-l bg-background flex flex-col overflow-hidden"
           >
             <div className="flex-1 overflow-y-auto">
 
@@ -741,6 +1321,7 @@ export default function CommandCenter() {
                   <>
                     <div className="relative inline-block mb-2">
                       <Avatar className="h-14 w-14 mx-auto">
+                        {currentDm?.avatarUrl && <AvatarImage src={currentDm.avatarUrl} alt={currentDm.name} />}
                         <AvatarFallback className={cn("text-base font-bold",
                           currentDm?.role === "Admin"    ? "bg-purple-100 text-purple-700" :
                           currentDm?.role === "Employee" ? "bg-blue-100 text-blue-700"     : "bg-emerald-100 text-emerald-700"
@@ -834,12 +1415,13 @@ export default function CommandCenter() {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Active Now</p>
                 <div className="space-y-2">
                   {[
-                    { id: "self", name: "Admin", avatar: "AD", role: "Admin" as const, status: "online" as UserStatus },
-                    ...DM_USERS.filter(d => d.id !== "dm-admin" && (d.status === "online" || d.status === "away")),
+                    { id: "self", name: roleInfo.msgUser, avatar: roleInfo.msgAvatar, avatarUrl: roleInfo.msgAvatarUrl, role: roleInfo.msgRole as RoleMsgRole, status: "online" as UserStatus },
+                    ...dmUsers.filter(d => d.status === "online" || d.status === "away"),
                   ].map(u => (
                     <div key={u.id} className="flex items-center gap-2.5">
                       <div className="relative">
                         <Avatar className="h-6 w-6">
+                          {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt={u.name} />}
                           <AvatarFallback className={cn("text-[9px] font-bold",
                             u.role === "Admin"    ? "bg-purple-100 text-purple-700" :
                             "role" in u && u.role === "Employee" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
@@ -856,42 +1438,25 @@ export default function CommandCenter() {
                 </div>
               </div>
 
-              {/* ── Recent Activity ── */}
-              <div className="p-4 border-b">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Recent Activity</p>
-                <div className="space-y-2.5">
-                  {RECENT_ACTIVITIES.map((a, i) => {
-                    const Icon = a.icon;
-                    return (
-                      <div key={i} className="flex items-start gap-2.5">
-                        <Icon size={12} className={cn("shrink-0 mt-0.5", a.color)} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] leading-tight">{a.text}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">{a.time}</p>
+              {RECENT_ACTIVITIES.length > 0 && (
+                <div className="p-4 border-b">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Recent Activity</p>
+                  <div className="space-y-2.5">
+                    {RECENT_ACTIVITIES.map((a, i) => {
+                      const Icon = a.icon;
+                      return (
+                        <div key={i} className="flex items-start gap-2.5">
+                          <Icon size={12} className={cn("shrink-0 mt-0.5", a.color)} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] leading-tight">{a.text}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">{a.time}</p>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-
-              {/* ── Upcoming ── */}
-              <div className="p-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Upcoming</p>
-                <div className="space-y-2">
-                  {[
-                    { label: "Sprint S01 ends",          time: "Jun 30"   },
-                    { label: "Q2 Performance Review",    time: "Jul 5"    },
-                    { label: "Certificate Issuance",     time: "Jul 1–15" },
-                    { label: "Office Holiday",           time: "Jul 4"    },
-                  ].map(ev => (
-                    <div key={ev.label} className="flex items-center justify-between">
-                      <span className="text-[11px] text-foreground/80 truncate">{ev.label}</span>
-                      <span className="text-[10px] text-muted-foreground shrink-0 ml-2 font-medium">{ev.time}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
 
             </div>
 

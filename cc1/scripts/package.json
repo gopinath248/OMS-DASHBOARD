@@ -5,7 +5,16 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "seed:planway-users": "tsx ./src/seed-planway-users.ts",
+    "auth:migrate-from-cc1-app": "tsx ./src/migrate-auth-from-cc1-app.ts",
+    "db:init": "tsx ./src/db-init.ts",
+    "db:bootstrap": "corepack pnpm run db:init && corepack pnpm run seed:planway-users",
+    "setup:smart-cp": "corepack pnpm run db:bootstrap",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "bcryptjs": "^3.0.3"
   },
   "devDependencies": {
     "@types/node": "catalog:",

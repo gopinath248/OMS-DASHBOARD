@@ -1,0 +1,21 @@
+[x] Employee page filter changed from "All Designations" to "All Roles"
+[x] Intern page filter changed from "All Designations" to "All Roles"
+[x] Reports page includes "Ticket by Type"
+[x] "Ticket by Type" chart uses a horizontal bar chart
+[x] Credential Management page created for HR admin access
+[x] Credential Management page can create credentials
+[x] Credential Management page can manage credential priority for interns and staff
+[x] Intern page project popup added for admin view / assign / change
+[x] Employee page project popup added for admin view / assign / change
+[x] Add Employee name placeholder changed to "Name"
+[x] Add Employee phone placeholder changed to "10 digits"
+
+Recheck status
+
+[x] TypeScript check passed
+[x] Production build passed
+[x] Login check passed with AarthiCC001 / aarthi@123
+[x] Intern page popup check passed
+[x] Employee page popup check passed
+[x] Reports Ticket by Type check passed
+[x] Credential Management page check passed

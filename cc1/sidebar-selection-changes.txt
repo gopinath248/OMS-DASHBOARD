@@ -1,0 +1,35 @@
+Sidebar selection changes
+
+1. Added tab-specific PLANYWAY sidebar links:
+   - Sprint Management opens /planway?tab=active
+   - Backlog opens /planway?tab=backlog
+   - Active Sprint opens /planway?tab=board
+   - Sprint Archive opens /planway?tab=completed
+
+2. Updated the PLANYWAY arrow behavior:
+   - The arrow is visible on the PLANYWAY section header.
+   - Clicking the PLANYWAY header expands or collapses the section.
+   - The arrow rotates based on the open or closed state.
+
+3. Updated Sprint Management page behavior:
+   - The page reads the tab value from the URL.
+   - Clicking a tab updates the URL.
+   - Opening a sidebar item shows the correct Sprint Management tab.
+
+4. Follow-up fix for Sprint Management to Backlog selection:
+   - Changed PLANYWAY tab links from query URLs to path URLs.
+   - Sprint Management now opens /planway/active.
+   - Backlog now opens /planway/backlog.
+   - Active Sprint now opens /planway/board.
+   - Sprint Archive now opens /planway/completed.
+   - Added a /planway/:tab route so clicking between sidebar items always triggers navigation.
+   - Sidebar now opens expanded by default for new sessions so the arrow and labels are visible.
+
+5. Recheck completed:
+   - TypeScript check passed.
+   - Production build passed.
+   - Verified login with AarthiCC001 / aarthi@123.
+   - Verified clicking Sprint Management opens /planway/active.
+   - Verified clicking Backlog from the sidebar opens /planway/backlog.
+   - Verified Backlog content is visible after the click.
+   - Verified the sidebar selected item changes to Backlog.

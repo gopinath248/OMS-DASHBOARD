@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { apiJson } from "@/lib/api";
 
 const LEAVE_BALANCES: Record<string, { label: string; remaining: number; color: string; bg: string; border: string }> = {
   Casual: { label: "Casual Leave", remaining: 5, color: "text-blue-900", bg: "bg-blue-50", border: "border-blue-100" },
@@ -21,6 +22,7 @@ export default function ApplyLeave() {
   const [, setLocation] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [savedRequest, setSavedRequest] = useState<{ id: string; status: string } | null>(null);
   const [form, setForm] = useState({
     type: "",
     startDate: "",
@@ -41,7 +43,7 @@ export default function ApplyLeave() {
     return e;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) {
@@ -50,14 +52,32 @@ export default function ApplyLeave() {
     }
     setErrors({});
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+
+    try {
+      const payload = await apiJson<{ leaveRequest: { id: string; status: string } }>("/leave-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          type: form.type,
+          startDate: form.startDate,
+          endDate: form.endDate,
+          reason: form.reason.trim(),
+        }),
+      });
+      setSavedRequest(payload.leaveRequest);
       setSubmitted(true);
       toast({
         title: "Leave Request Submitted",
-        description: "Your request has been sent to your mentor for approval.",
+        description: "Your request has been sent to your manager for approval.",
       });
-    }, 900);
+    } catch (error) {
+      toast({
+        title: "Unable to Submit Leave",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -65,7 +85,7 @@ export default function ApplyLeave() {
       <div className="max-w-2xl mx-auto space-y-6 pb-10">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Apply for Leave</h1>
-          <p className="text-muted-foreground mt-1">Submit a new leave request to your mentor.</p>
+          <p className="text-muted-foreground mt-1">Submit a new leave request to your manager.</p>
         </div>
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-10 pb-10 flex flex-col items-center text-center space-y-4">
@@ -77,12 +97,15 @@ export default function ApplyLeave() {
               Your <strong>{form.type}</strong> leave request from{" "}
               <strong>{form.startDate}</strong> to <strong>{form.endDate}</strong> has been submitted and is pending approval.
             </p>
-            <p className="text-sm text-green-600">Your mentor will review your request shortly. You'll be notified once a decision is made.</p>
+            {savedRequest && (
+              <p className="text-xs text-green-700">Request #{savedRequest.id} is currently {savedRequest.status}.</p>
+            )}
+            <p className="text-sm text-green-600">Your manager will review your request shortly. You'll be notified once a decision is made.</p>
             <div className="flex gap-3 pt-2">
               <Button variant="outline" onClick={() => { setSubmitted(false); setForm({ type: "", startDate: "", endDate: "", reason: "" }); }}>
                 Submit Another
               </Button>
-              <Button onClick={() => setLocation("/student-dashboard")}>
+              <Button onClick={() => setLocation("/intern/dashboard")}>
                 Back to Dashboard
               </Button>
             </div>
@@ -96,7 +119,7 @@ export default function ApplyLeave() {
     <div className="max-w-2xl mx-auto space-y-6 pb-10">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Apply for Leave</h1>
-        <p className="text-muted-foreground mt-1">Submit a new leave request to your mentor.</p>
+        <p className="text-muted-foreground mt-1">Submit a new leave request to your manager.</p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -209,7 +232,7 @@ export default function ApplyLeave() {
             </div>
           </CardContent>
           <CardFooter className="flex justify-between border-t p-6 bg-muted/20">
-            <Button variant="outline" type="button" onClick={() => setLocation("/student-dashboard")}>
+            <Button variant="outline" type="button" onClick={() => setLocation("/intern/dashboard")}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>

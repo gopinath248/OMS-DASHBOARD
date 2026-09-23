@@ -14,7 +14,25 @@ import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/lib/theme-provider";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { notifications as allNotifications } from "@/data/mockData";
+import {
+  leaveRequests,
+  notifications as allNotifications,
+  projectDocuments,
+  projects,
+  staff,
+  students,
+  tasks,
+} from "@/data/mockData";
+import {
+  AUTH_SESSION_CHANGED_EVENT,
+  clearAuthSession,
+  formatRole,
+  getAuthSession,
+  roleToNavigationRole,
+  type AuthSession,
+  type NavigationRole,
+} from "@/lib/auth";
+import { markAllNotificationsRead } from "@/lib/api";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   System: <AlertTriangle size={14} className="text-blue-500" />,
@@ -24,29 +42,265 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Announcements: <Megaphone size={14} className="text-pink-500" />,
 };
 
-const ROLE_INFO: Record<string, { name: string; email: string; initials: string }> = {
-  admin: { name: "Admin User", email: "admin@codecore.edu", initials: "AU" },
-  staff: { name: "Dr. Smith", email: "smith@codecore.edu", initials: "DS" },
-  student: { name: "Alice Johnson", email: "alice.johnson@codecore.edu", initials: "AJ" },
+const ROLE_INFO: Record<string, { name: string; email: string; initials: string; avatarUrl: string | null }> = {
+  admin: { name: "Admin User", email: "admin@cc.local", initials: "AU", avatarUrl: null },
+  employee: { name: "Dr. Smith", email: "smith@cc.local", initials: "DS", avatarUrl: null },
+  intern: { name: "Intern User", email: "intern@cc.local", initials: "IU", avatarUrl: null },
+  hr: { name: "HR User", email: "hr@cc.local", initials: "HU", avatarUrl: null },
+  manager: { name: "manager User", email: "manager@cc.local", initials: "MU", avatarUrl: null },
 };
+
+type SearchTarget = {
+  label: string;
+  path: string;
+  type: string;
+  description?: string;
+  keywords: string[];
+  roles: NavigationRole[];
+};
+
+const ALL_NAV_ROLES: NavigationRole[] = ["admin", "employee", "intern", "hr", "manager"];
+const ADMIN_ROLES: NavigationRole[] = ["admin"];
+const ADMIN_EMPLOYEE_ROLES: NavigationRole[] = ["admin", "employee", "hr", "manager"];
+
+const PAGE_SEARCH_TARGETS: SearchTarget[] = [
+  { label: "Admin Dashboard", path: "/admin/dashboard", type: "Page", description: "Admin overview", keywords: ["dashboard", "admin", "overview", "home"], roles: ADMIN_ROLES },
+  { label: "Employee Dashboard", path: "/employee/dashboard", type: "Page", description: "Employee overview", keywords: ["dashboard", "employee", "staff home"], roles: ["employee"] },
+  { label: "HR Dashboard", path: "/hr/dashboard", type: "Page", description: "HR overview", keywords: ["dashboard", "hr", "people"], roles: ["hr"] },
+  { label: "manager Dashboard", path: "/manager/dashboard", type: "Page", description: "manager overview", keywords: ["dashboard", "manager", "team"], roles: ["manager"] },
+  { label: "Intern Dashboard", path: "/intern/dashboard", type: "Page", description: "Intern overview", keywords: ["dashboard", "intern", "student home"], roles: ["intern"] },
+  { label: "Resource Management", path: "/students", type: "Page", description: "Intern records", keywords: ["resource", "intern", "student", "resources", "onboarding"], roles: ADMIN_EMPLOYEE_ROLES },
+  { label: "Employee Management", path: "/staff", type: "Page", description: "Employee records", keywords: ["employee", "staff", "designation"], roles: ADMIN_ROLES },
+  { label: "Performance Management", path: "/performance", type: "Page", description: "Performance scorecards", keywords: ["performance", "attendance", "score", "rating"], roles: ADMIN_ROLES },
+  { label: "Reports & Analytics", path: "/reports", type: "Page", description: "Reports and exports", keywords: ["reports", "analytics", "csv", "pdf"], roles: ADMIN_ROLES },
+  { label: "Leave Management", path: "/leave", type: "Page", description: "Leave requests", keywords: ["leave", "holiday", "absence", "approval"], roles: ADMIN_EMPLOYEE_ROLES },
+  { label: "Apply Leave", path: "/apply-leave", type: "Page", description: "Intern leave request", keywords: ["apply leave", "request leave", "absence"], roles: ["intern"] },
+  { label: "Salary Management", path: "/salary", type: "Page", description: "Payroll and payslips", keywords: ["salary", "payslip", "payroll", "inr", "rupee"], roles: ADMIN_ROLES },
+  { label: "Calendar", path: "/calendar", type: "Page", description: "Events and meetings", keywords: ["calendar", "meeting", "schedule", "event"], roles: ALL_NAV_ROLES },
+  { label: "Notifications", path: "/notifications", type: "Page", description: "Alerts and updates", keywords: ["notifications", "alerts", "status", "updates"], roles: ALL_NAV_ROLES },
+  { label: "Settings", path: "/settings", type: "Page", description: "Profile and security", keywords: ["profile", "theme", "settings", "security", "password"], roles: ALL_NAV_ROLES },
+  { label: "Help Center", path: "/help", type: "Page", description: "Support articles", keywords: ["help", "support", "faq"], roles: ALL_NAV_ROLES },
+  { label: "Chat Center", path: "/commands", type: "Page", description: "Team messages", keywords: ["chat", "messages", "command", "conversation"], roles: ALL_NAV_ROLES },
+  { label: "Projects", path: "/projects", type: "Page", description: "Project workspace", keywords: ["project", "documents", "assigned work"], roles: ALL_NAV_ROLES },
+  { label: "Task Board", path: "/tasks", type: "Page", description: "Kanban tasks", keywords: ["task", "tasks", "ticket", "kanban", "todo", "done"], roles: ALL_NAV_ROLES },
+  { label: "Sprint Management", path: "/planway/active", type: "Page", description: "PLANWAY active sprint", keywords: ["sprint", "jira", "active sprint", "planyway"], roles: ADMIN_ROLES },
+  { label: "Credentials", path: "/credentials", type: "Page", description: "Access control", keywords: ["credentials", "user id", "password", "access"], roles: ADMIN_ROLES },
+];
+
+function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function includesQuery(target: SearchTarget, query: string) {
+  const haystack = [
+    target.label,
+    target.type,
+    target.description ?? "",
+    ...target.keywords,
+  ].join(" ").toLowerCase();
+
+  return query
+    .split(/\s+/)
+    .filter(Boolean)
+    .every(part => haystack.includes(part));
+}
+
+function getSearchTargets(role: NavigationRole): SearchTarget[] {
+  const studentTargets: SearchTarget[] = students.map(student => ({
+    label: student.name,
+    path: `/students/${student.id}`,
+    type: "Intern",
+    description: `${student.id} • ${student.project}`,
+    keywords: [
+      student.id,
+      student.name,
+      student.role,
+      student.project,
+      student.college,
+      student.email,
+      student.phone,
+      student.manager,
+      student.status,
+      ...student.skills,
+    ],
+    roles: ADMIN_EMPLOYEE_ROLES,
+  }));
+
+  const staffTargets: SearchTarget[] = staff.map(employee => ({
+    label: employee.name,
+    path: `/staff/${employee.id}`,
+    type: "Employee",
+    description: `${employee.id} • ${employee.designation}`,
+    keywords: [
+      employee.id,
+      employee.name,
+      employee.role,
+      employee.designation,
+      employee.email,
+      employee.phone,
+      employee.status,
+      employee.bio,
+    ],
+    roles: ADMIN_ROLES,
+  }));
+
+  const projectTargets: SearchTarget[] = projects.map(project => ({
+    label: project.name,
+    path: `/projects/${project.id}`,
+    type: "Project",
+    description: `${project.id} • ${project.status}`,
+    keywords: [
+      project.id,
+      project.name,
+      project.description,
+      project.category,
+      project.createdBy,
+      project.status,
+      project.priority ?? "",
+      ...(project.techStack ?? []),
+    ],
+    roles: ALL_NAV_ROLES,
+  }));
+
+  const taskTargets: SearchTarget[] = tasks.map(task => ({
+    label: task.title,
+    path: "/tasks",
+    type: "Task",
+    description: `${task.id} • ${task.status} • ${task.assignedTo}`,
+    keywords: [
+      task.id,
+      task.title,
+      task.description,
+      task.assignedTo,
+      task.priority,
+      task.status,
+      task.dueDate,
+    ],
+    roles: ALL_NAV_ROLES,
+  }));
+
+  const leaveTargets: SearchTarget[] = leaveRequests.map(request => ({
+    label: `${request.internName} ${request.type} Leave`,
+    path: "/leave",
+    type: "Leave",
+    description: `${request.id} • ${request.status} • ${request.duration} day(s)`,
+    keywords: [
+      request.id,
+      request.internName,
+      request.type,
+      request.reason,
+      request.status,
+      request.startDate,
+      request.endDate,
+    ],
+    roles: ADMIN_EMPLOYEE_ROLES,
+  }));
+
+  const documentTargets: SearchTarget[] = projectDocuments.map(document => ({
+    label: document.title,
+    path: `/projects/${document.projectId}`,
+    type: "Document",
+    description: `${document.fileName} • ${document.uploadedBy}`,
+    keywords: [
+      document.id,
+      document.projectId,
+      document.title,
+      document.fileName,
+      document.fileType,
+      document.uploadedBy,
+      document.uploadDate,
+    ],
+    roles: ALL_NAV_ROLES,
+  }));
+
+  const notificationTargets: SearchTarget[] = allNotifications.map(notification => ({
+    label: notification.title,
+    path: "/notifications",
+    type: "Notification",
+    description: notification.message,
+    keywords: [
+      notification.id,
+      notification.category,
+      notification.title,
+      notification.message,
+      notification.time,
+    ],
+    roles: ALL_NAV_ROLES,
+  }));
+
+  return [
+    ...PAGE_SEARCH_TARGETS,
+    ...studentTargets,
+    ...staffTargets,
+    ...projectTargets,
+    ...taskTargets,
+    ...leaveTargets,
+    ...documentTargets,
+    ...notificationTargets,
+  ].filter(target => target.roles.includes(role));
+}
 
 export function Topbar() {
   const { theme, setTheme } = useTheme();
   const [time, setTime] = useState(new Date());
   const [notifications, setNotifications] = useState(allNotifications);
+  const [search, setSearch] = useState("");
+  const [session, setSession] = useState<AuthSession | null>(() => getAuthSession());
   const [, navigate] = useLocation();
-  const role = localStorage.getItem("role") ?? "admin";
-  const userInfo = ROLE_INFO[role] ?? ROLE_INFO["admin"];
+  const role = session ? roleToNavigationRole(session.user.role) : "admin";
+  const userInfo = session
+    ? {
+        name: session.user.fullName,
+        email: session.user.email,
+        initials: getInitials(session.user.fullName),
+        avatarUrl: session.user.avatarUrl ?? null,
+      }
+    : ROLE_INFO[role] ?? ROLE_INFO["admin"];
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    setNotifications([...allNotifications]);
+  }, [allNotifications]);
+
+  useEffect(() => {
+    const refreshSession = () => setSession(getAuthSession());
+    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, refreshSession);
+    window.addEventListener("storage", refreshSession);
+    return () => {
+      window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, refreshSession);
+      window.removeEventListener("storage", refreshSession);
+    };
+  }, []);
+
   const unread = notifications.filter(n => !n.read).length;
   const recent = notifications.slice(0, 5);
+  const availableSearchTargets = getSearchTargets(role);
+  const searchResults = search.trim()
+    ? availableSearchTargets
+        .filter(target => includesQuery(target, search.trim().toLowerCase()))
+        .slice(0, 8)
+    : [];
 
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  const markAllRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    markAllNotificationsRead().catch(error => console.error("Unable to persist notification read state.", error));
+  };
+  const runSearch = (path?: string) => {
+    const targetPath = path ?? searchResults[0]?.path;
+    if (!targetPath) return;
+    setSearch("");
+    navigate(targetPath);
+  };
 
   return (
     <header className="h-16 border-b bg-card/80 backdrop-blur-md flex items-center justify-between px-6 sticky top-0 z-10">
@@ -57,7 +311,46 @@ export function Topbar() {
             type="search"
             placeholder="Search across platform..."
             className="w-full pl-9 bg-muted/50 border-transparent focus-visible:bg-background"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") runSearch();
+              if (e.key === "Escape") setSearch("");
+            }}
           />
+          {search.trim() && (
+            <div className="absolute left-0 right-0 top-10 z-40 rounded-md border bg-popover shadow-md overflow-hidden">
+              {searchResults.length > 0 ? (
+                searchResults.map(result => (
+                  <button
+                    key={`${result.type}-${result.path}-${result.label}`}
+                    type="button"
+                    className="block w-full px-3 py-2 text-left hover:bg-muted"
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      runSearch(result.path);
+                    }}
+                  >
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{result.label}</span>
+                        {result.description && (
+                          <span className="block truncate text-xs text-muted-foreground">{result.description}</span>
+                        )}
+                      </span>
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                        {result.type}
+                      </span>
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-3 text-sm text-muted-foreground">
+                  No matching page or record found.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -138,7 +431,7 @@ export function Topbar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage src="" alt={userInfo.name} />
+                {userInfo.avatarUrl && <AvatarImage src={userInfo.avatarUrl} alt={userInfo.name} />}
                 <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">{userInfo.initials}</AvatarFallback>
               </Avatar>
             </Button>
@@ -148,7 +441,9 @@ export function Topbar() {
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-semibold leading-none">{userInfo.name}</p>
                 <p className="text-xs leading-none text-muted-foreground">{userInfo.email}</p>
-                <Badge variant="outline" className="w-fit mt-1.5 text-[10px] capitalize px-1.5 py-0.5 h-auto">{role}</Badge>
+                <Badge variant="outline" className="w-fit mt-1.5 text-[10px] capitalize px-1.5 py-0.5 h-auto">
+                  {session ? formatRole(session.user.role) : formatRole(role)}
+                </Badge>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -161,7 +456,7 @@ export function Topbar() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="cursor-pointer text-destructive focus:text-destructive"
-              onClick={() => { localStorage.removeItem("role"); navigate("/login"); }}
+              onClick={() => { clearAuthSession(); window.location.replace("/login"); }}
             >
               Log out
             </DropdownMenuItem>

@@ -26,6 +26,10 @@ app.use(
   }),
 );
 app.use(cors());
+app.use((_req, res, next) => {
+  res.charset = "utf-8";
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

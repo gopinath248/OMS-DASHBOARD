@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Users, ClipboardCheck, Clock, CheckCircle2, Calendar as CalendarIcon,
   AlertTriangle, FolderOpen, Plus, X, TrendingUp, Bell, Activity,
@@ -7,19 +7,23 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { students, tasks, leaveRequests, projects, notifications } from "@/data/mockData";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { students, tasks, projects, notifications, type LeaveRequest } from "@/data/mockData";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
+import { getAuthSession } from "@/lib/auth";
+import { apiJson } from "@/lib/api";
 
 type LeaveStatus = "Pending" | "Approved" | "Rejected";
+type StaffNotification = typeof notifications[number];
 
 interface StaffLeave {
   id: string;
@@ -33,13 +37,6 @@ interface StaffLeave {
   rejectionReason?: string;
 }
 
-const INITIAL_LEAVES: StaffLeave[] = [
-  { id: "SLR001", type: "Sick", fromDate: "2024-04-10", toDate: "2024-04-11", days: 2, status: "Approved", appliedDate: "2024-04-08", reason: "Fever and cold." },
-  { id: "SLR002", type: "Casual", fromDate: "2024-05-20", toDate: "2024-05-20", days: 1, status: "Pending", appliedDate: "2024-05-18", reason: "Family function." },
-  { id: "SLR003", type: "Personal", fromDate: "2024-03-05", toDate: "2024-03-06", days: 2, status: "Rejected", appliedDate: "2024-03-03", reason: "Personal errands.", rejectionReason: "Insufficient leave balance." },
-  { id: "SLR004", type: "Emergency", fromDate: "2024-06-15", toDate: "2024-06-15", days: 1, status: "Approved", appliedDate: "2024-06-14", reason: "Medical emergency for family member." },
-];
-
 const LEAVE_QUOTA: Record<string, number> = { Sick: 10, Casual: 6, Emergency: 4 };
 const LEAVE_TYPES = ["Sick", "Casual", "Personal", "Emergency", "Maternity", "Paternity"];
 
@@ -49,20 +46,49 @@ const STATUS_COLORS: Record<LeaveStatus, string> = {
   Rejected: "text-red-700 bg-red-50 border-red-200",
 };
 
+function normalizeLeaveType(type: string) {
+  return type.replace(/\s+Leave$/i, "");
+}
+
+function mapLeaveRequest(leave: LeaveRequest): StaffLeave {
+  return {
+    id: leave.id,
+    type: normalizeLeaveType(leave.type),
+    fromDate: leave.startDate,
+    toDate: leave.endDate,
+    days: leave.duration,
+    status: (leave.status as LeaveStatus) || "Pending",
+    appliedDate: leave.submittedAt ? leave.submittedAt.slice(0, 10) : "",
+    reason: leave.reason,
+    rejectionReason: leave.rejectionReason,
+  };
+}
+
 export default function StaffDashboard() {
   const { toast } = useToast();
-  const myInterns = students.filter(s => s.mentor === "Dr. Smith" || s.mentor === "Prof. Davis").slice(0, 4);
+  const session = getAuthSession();
+  const currentEmployeeId = session?.user.userId ?? "EMP001";
+  const currentName = session?.user.fullName ?? "Dr. Smith";
+  const myInterns = students.filter(s => s.manager === currentName).slice(0, 4);
   const pendingTasks = tasks.filter(t => t.status === "In Progress");
-  const pendingLeaves = leaveRequests.filter(l => l.status === "Pending");
-  const myProjects = projects.filter(p => p.assignedStaff.includes("EMP001") || p.assignedStaff.includes("EMP002"));
+  const myProjects = projects.filter(p => p.assignedStaff.includes(currentEmployeeId));
 
-  const [leaveList, setLeaveList] = useState<StaffLeave[]>(INITIAL_LEAVES);
+  const [leaveList, setLeaveList] = useState<StaffLeave[]>([]);
+  const [loadingLeaves, setLoadingLeaves] = useState(false);
+  const [submittingLeave, setSubmittingLeave] = useState(false);
+  const [notificationList, setNotificationList] = useState(notifications);
+  const [selectedNotification, setSelectedNotification] = useState<StaffNotification | null>(null);
+
+  useEffect(() => {
+    setNotificationList([...notifications]);
+  }, [notifications]);
   const [leaveTab, setLeaveTab] = useState<"apply" | "history" | "balance">("history");
   const [historyFilter, setHistoryFilter] = useState<"All" | LeaveStatus>("All");
 
   const [leaveForm, setLeaveForm] = useState({
     type: "", fromDate: "", toDate: "", reason: "",
   });
+  const pendingLeaves = leaveList.filter(l => l.status === "Pending");
 
   const calcDays = (from: string, to: string) => {
     if (!from || !to) return 0;
@@ -70,26 +96,91 @@ export default function StaffDashboard() {
     return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)) + 1);
   };
 
-  const handleApplyLeave = () => {
+  const loadMyLeaves = async () => {
+    setLoadingLeaves(true);
+    try {
+      const payload = await apiJson<{ leaveRequests: LeaveRequest[] }>("/leave-requests?scope=mine");
+      setLeaveList(payload.leaveRequests.map(mapLeaveRequest));
+    } catch (error) {
+      toast({
+        title: "Unable to Load Leave History",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingLeaves(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMyLeaves();
+  }, []);
+
+  useEffect(() => {
+    const session = getAuthSession();
+    if (!session) return;
+
+    const source = new EventSource(`/api/chat/events?token=${encodeURIComponent(session.token)}`);
+    const update = (event: Event) => {
+      const payload = JSON.parse((event as MessageEvent).data) as { leave?: LeaveRequest };
+      if (!payload.leave || payload.leave.userId !== currentEmployeeId) return;
+      const mapped = mapLeaveRequest(payload.leave);
+      setLeaveList(prev => {
+        const exists = prev.some(item => item.id === mapped.id);
+        return exists
+          ? prev.map(item => item.id === mapped.id ? mapped : item)
+          : [mapped, ...prev];
+      });
+    };
+
+    source.addEventListener("leave_request_created", update);
+    source.addEventListener("leave_request_approved", update);
+    source.addEventListener("leave_request_rejected", update);
+    source.onerror = () => {
+      loadMyLeaves();
+    };
+
+    return () => source.close();
+  }, [currentEmployeeId]);
+
+  const handleApplyLeave = async () => {
     if (!leaveForm.type || !leaveForm.fromDate || !leaveForm.toDate || !leaveForm.reason.trim()) {
       toast({ title: "Please fill all required fields.", variant: "destructive" });
       return;
     }
-    const days = calcDays(leaveForm.fromDate, leaveForm.toDate);
-    const newLeave: StaffLeave = {
-      id: `SLR${Date.now()}`,
-      type: leaveForm.type,
-      fromDate: leaveForm.fromDate,
-      toDate: leaveForm.toDate,
-      days,
-      status: "Pending",
-      appliedDate: new Date().toISOString().slice(0, 10),
-      reason: leaveForm.reason,
-    };
-    setLeaveList(prev => [newLeave, ...prev]);
-    setLeaveForm({ type: "", fromDate: "", toDate: "", reason: "" });
-    setLeaveTab("history");
-    toast({ title: "Leave Applied", description: `Your ${leaveForm.type} leave request has been submitted.` });
+    if (leaveForm.toDate < leaveForm.fromDate) {
+      toast({ title: "To date must be after from date.", variant: "destructive" });
+      return;
+    }
+    if (leaveForm.reason.trim().length < 15) {
+      toast({ title: "Reason must be at least 15 characters.", variant: "destructive" });
+      return;
+    }
+
+    setSubmittingLeave(true);
+    try {
+      const payload = await apiJson<{ leaveRequest: LeaveRequest }>("/leave-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          type: leaveForm.type,
+          startDate: leaveForm.fromDate,
+          endDate: leaveForm.toDate,
+          reason: leaveForm.reason.trim(),
+        }),
+      });
+      setLeaveList(prev => [mapLeaveRequest(payload.leaveRequest), ...prev]);
+      setLeaveForm({ type: "", fromDate: "", toDate: "", reason: "" });
+      setLeaveTab("history");
+      toast({ title: "Leave Applied", description: `Your ${leaveForm.type} leave request has been submitted.` });
+    } catch (error) {
+      toast({
+        title: "Unable to Submit Leave",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingLeave(false);
+    }
   };
 
   const filteredLeaves = leaveList.filter(l =>
@@ -118,13 +209,18 @@ export default function StaffDashboard() {
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 4);
 
-  const staffNotifications = notifications.filter(n => !n.read).slice(0, 4);
+  const staffNotifications = notificationList.filter(n => !n.read);
+  const openNotification = (notification: StaffNotification) => {
+    setSelectedNotification(notification);
+    setNotificationList(prev => prev.map(n => n.id === notification.id ? { ...n, read: true } : n));
+    apiJson<void>(`/notifications/${encodeURIComponent(notification.id)}/read`, { method: "PATCH" })
+      .catch(error => console.error("Unable to persist notification read state.", error));
+  };
 
   return (
     <div className="space-y-6 pb-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Staff Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Welcome back. Here's what's happening with your interns.</p>
+        <h1 className="text-3xl font-bold tracking-tight">Employee Dashboard</h1>
       </div>
 
       {/* KPIs */}
@@ -163,6 +259,7 @@ export default function StaffDashboard() {
                   <div className="p-4 border rounded-xl hover:border-primary/50 hover:bg-muted/30 transition-all cursor-pointer">
                     <div className="flex items-center gap-3 mb-3">
                       <Avatar>
+                        {intern.avatarUrl && <AvatarImage src={intern.avatarUrl} alt={intern.name} />}
                         <AvatarFallback className="bg-primary/10 text-primary font-medium">
                           {intern.name.split(" ").map(n => n[0]).join("")}
                         </AvatarFallback>
@@ -278,6 +375,7 @@ export default function StaffDashboard() {
           <CardTitle className="flex items-center gap-2">
             <CalendarDays size={18} /> Leave Management
           </CardTitle>
+          {loadingLeaves && <p className="text-xs text-muted-foreground mt-1">Loading leave history from database...</p>}
         </CardHeader>
         <CardContent>
           <div className="flex gap-1 mb-5 bg-muted/40 p-1 rounded-lg w-fit">
@@ -335,7 +433,9 @@ export default function StaffDashboard() {
                 />
               </div>
               <div className="flex gap-3">
-                <Button onClick={handleApplyLeave}>Submit Leave Request</Button>
+                <Button onClick={handleApplyLeave} disabled={submittingLeave}>
+                  {submittingLeave ? "Submitting..." : "Submit Leave Request"}
+                </Button>
                 <Button variant="outline" onClick={() => setLeaveForm({ type: "", fromDate: "", toDate: "", reason: "" })}>
                   Clear
                 </Button>
@@ -362,7 +462,9 @@ export default function StaffDashboard() {
               </div>
 
               {filteredLeaves.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No leave requests found.</p>
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  {loadingLeaves ? "Loading leave requests..." : "No leave requests found."}
+                </p>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
@@ -513,18 +615,29 @@ export default function StaffDashboard() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {staffNotifications.map(n => (
-              <div key={n.id} className="flex gap-3 p-3 border rounded-lg hover:bg-muted/20 transition-colors">
-                <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{n.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">{n.time}</p>
-                </div>
-                <Badge variant="outline" className="text-[10px] h-5 shrink-0">{n.category}</Badge>
+          <CardContent>
+            {staffNotifications.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No unread notifications.</p>
+            ) : (
+              <div className="max-h-72 overflow-y-auto pr-1 space-y-3">
+                {staffNotifications.map(n => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => openNotification(n)}
+                    className="w-full flex gap-3 p-3 border rounded-lg hover:bg-muted/20 transition-colors text-left"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{n.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">{n.time}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] h-5 shrink-0">{n.category}</Badge>
+                  </button>
+                ))}
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
 
@@ -549,6 +662,25 @@ export default function StaffDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={!!selectedNotification} onOpenChange={open => !open && setSelectedNotification(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{selectedNotification?.title}</DialogTitle>
+          </DialogHeader>
+          {selectedNotification && (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{selectedNotification.category}</Badge>
+                <span className="text-xs text-muted-foreground">{selectedNotification.time}</span>
+              </div>
+              <p className="leading-relaxed text-muted-foreground whitespace-pre-line">
+                {selectedNotification.message}
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

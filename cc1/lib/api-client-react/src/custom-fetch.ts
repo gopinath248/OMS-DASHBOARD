@@ -342,7 +342,7 @@ export async function customFetch<T = unknown>(
     !headers.has("content-type") &&
     looksLikeJson(init.body)
   ) {
-    headers.set("content-type", "application/json");
+    headers.set("content-type", "application/json; charset=utf-8");
   }
 
   if (responseType === "json" && !headers.has("accept")) {

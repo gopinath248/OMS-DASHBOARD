@@ -15,10 +15,10 @@ paths = [ "/" ]
 localPort = 19315
 
 [services.development]
-run = "pnpm --filter @workspace/smart-cp run dev"
+run = "corepack pnpm --filter @workspace/smart-cp run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/smart-cp", "run", "build" ]
+build = [ "corepack", "pnpm", "--filter", "@workspace/smart-cp", "run", "build" ]
 publicDir = "artifacts/smart-cp/dist/public"
 serve = "static"
 

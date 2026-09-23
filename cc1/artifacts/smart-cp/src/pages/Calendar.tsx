@@ -19,23 +19,33 @@ type CalendarEvent = {
   id: string; date: string; title: string; type: string;
   description?: string; time?: string; session?: string;
   priority?: string; assignedMembers?: string[]; location?: string;
+  meetingLink?: string; meetingId?: string;
 };
 
 type EventForm = {
   title: string; description: string; date: string; time: string;
   session: string; priority: string; assignedMembers: string[]; location: string; type: string;
+  meetingLink: string; meetingId: string;
 };
 
 type ViewMode = "month" | "week" | "agenda";
 
 const EMPTY_FORM: EventForm = {
   title: "", description: "", date: "", time: "",
-  session: "", priority: "Medium", assignedMembers: [], location: "", type: "Event",
+  session: "", priority: "Medium", assignedMembers: [], location: "", type: "Meeting",
+  meetingLink: "", meetingId: "",
 };
 
-const EVENT_TYPES = ["Deadline", "Meeting", "Leave", "Event", "Sprint", "task"];
+const EVENT_TYPES = ["Deadline", "Meeting", "Leave", "Event", "Sprint", "Task"];
 const PRIORITIES  = ["Critical", "High", "Medium", "Low"];
 const SESSIONS    = ["Forenoon", "Afternoon"];
+
+function sessionFromTime(time: string) {
+  if (!time) return "";
+  const hour = Number(time.split(":")[0]);
+  if (Number.isNaN(hour)) return "";
+  return hour < 12 ? "Forenoon" : "Afternoon";
+}
 
 const EVENT_COLORS: Record<string, string> = {
   Deadline: "bg-red-100 text-red-700 border-red-200",
@@ -43,13 +53,17 @@ const EVENT_COLORS: Record<string, string> = {
   Leave:    "bg-yellow-100 text-yellow-700 border-yellow-200",
   Event:    "bg-green-100 text-green-700 border-green-200",
   Sprint:   "bg-blue-100 text-blue-700 border-blue-200",
-  task:     "bg-sky-100 text-sky-700 border-sky-200",
+  Task:     "bg-sky-100 text-sky-700 border-sky-200",
 };
 
 const DOT_COLORS: Record<string, string> = {
   Deadline: "bg-red-500", Meeting: "bg-purple-500",
-  Leave: "bg-yellow-500", Event: "bg-green-500", Sprint: "bg-blue-500", task: "bg-sky-500",
+  Leave: "bg-yellow-500", Event: "bg-green-500", Sprint: "bg-blue-500", Task: "bg-sky-500",
 };
+
+function eventTypeKey(type: string) {
+  return EVENT_TYPES.find(item => item.toLowerCase() === type.toLowerCase()) ?? type;
+}
 
 const MONTH_NAMES = [
   "January","February","March","April","May","June",
@@ -115,9 +129,9 @@ function AddEventDialog({ open, onClose, onSave, editingEvent, prefilledDate }: 
       setForm(editingEvent ? {
         title: editingEvent.title, description: editingEvent.description ?? "",
         date: editingEvent.date, time: editingEvent.time ?? "",
-        session: editingEvent.session ?? "", priority: editingEvent.priority ?? "Medium",
+        session: editingEvent.session ?? sessionFromTime(editingEvent.time ?? ""), priority: editingEvent.priority ?? "Medium",
         assignedMembers: editingEvent.assignedMembers ?? [], location: editingEvent.location ?? "",
-        type: editingEvent.type,
+        type: editingEvent.type, meetingLink: editingEvent.meetingLink ?? "", meetingId: editingEvent.meetingId ?? "",
       } : { ...EMPTY_FORM, date: prefilledDate ?? "" });
     }
   }, [open, editingEvent, prefilledDate]);
@@ -126,19 +140,23 @@ function AddEventDialog({ open, onClose, onSave, editingEvent, prefilledDate }: 
     if (!form.title.trim()) { toast({ title: "Title is required", variant: "destructive" }); return; }
     if (!form.date) { toast({ title: "Date is required", variant: "destructive" }); return; }
     if (!form.time) { toast({ title: "Time is required", variant: "destructive" }); return; }
-    if (!form.session) { toast({ title: "Session is required", variant: "destructive" }); return; }
+    if (!form.location.trim() && !form.meetingLink.trim()) { toast({ title: "Location or meeting link is required", variant: "destructive" }); return; }
     onSave(form); onClose();
+  };
+
+  const handleTimeChange = (time: string) => {
+    setForm(f => ({ ...f, time, session: sessionFromTime(time) || f.session }));
   };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Plus size={18} />{editingEvent ? "Edit Event" : "Create New Event"}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Plus size={18} />{editingEvent ? "Edit Meeting" : "Add New Meeting"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label>Event Title <span className="text-destructive">*</span></Label>
+            <Label>Meeting Title <span className="text-destructive">*</span></Label>
             <Input placeholder="e.g. Team Standup" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
           </div>
           <div className="space-y-1.5">
@@ -147,7 +165,13 @@ function AddEventDialog({ open, onClose, onSave, editingEvent, prefilledDate }: 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Date <span className="text-destructive">*</span></Label><Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Time <span className="text-destructive">*</span></Label><Input type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} /></div>
+            <div className="space-y-1.5">
+              <Label>Time <span className="text-destructive">*</span></Label>
+              <div className="relative">
+                <Input type="time" className="pr-10" value={form.time} onChange={e => handleTimeChange(e.target.value)} />
+                <Clock size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -156,6 +180,7 @@ function AddEventDialog({ open, onClose, onSave, editingEvent, prefilledDate }: 
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>{SESSIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
+              <p className="text-[10px] text-muted-foreground">Auto-selected from time.</p>
             </div>
             <div className="space-y-1.5">
               <Label>Priority</Label>
@@ -175,6 +200,10 @@ function AddEventDialog({ open, onClose, onSave, editingEvent, prefilledDate }: 
             </div>
             <div className="space-y-1.5"><Label>Location</Label><Input placeholder="e.g. Room 204" value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} /></div>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5"><Label>Meeting Link</Label><Input placeholder="https://meet.example.com/team" value={form.meetingLink} onChange={e => setForm(f => ({ ...f, meetingLink: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>Meeting ID <span className="text-xs text-muted-foreground">(optional)</span></Label><Input placeholder="CCG-123-456" value={form.meetingId} onChange={e => setForm(f => ({ ...f, meetingId: e.target.value }))} /></div>
+          </div>
           <div className="space-y-1.5">
             <Label>Assigned Members</Label>
             <MemberMultiSelect selected={form.assignedMembers} onChange={v => setForm(f => ({ ...f, assignedMembers: v }))} />
@@ -182,7 +211,7 @@ function AddEventDialog({ open, onClose, onSave, editingEvent, prefilledDate }: 
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave}>{editingEvent ? "Update Event" : "Create Event"}</Button>
+          <Button onClick={handleSave}>{editingEvent ? "Update Meeting" : "Schedule Meeting"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -199,7 +228,7 @@ function EventDetailDialog({ event, open, onClose, onEdit, onDelete }: {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className={cn("text-xs", EVENT_COLORS[event.type] ?? "")}>{event.type}</Badge>
+            <Badge variant="outline" className={cn("text-xs", EVENT_COLORS[eventTypeKey(event.type)] ?? "")}>{eventTypeKey(event.type)}</Badge>
             {event.priority && <Badge variant="outline" className="text-xs">{event.priority}</Badge>}
             {event.session  && <Badge variant="outline" className="text-xs">{event.session}</Badge>}
           </div>
@@ -230,10 +259,21 @@ function EventDetailDialog({ event, open, onClose, onEdit, onDelete }: {
               </div>
             </div>
           )}
+          {(event.meetingLink || event.meetingId) && (
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+              {event.meetingId && <p><span className="font-medium">Meeting ID:</span> {event.meetingId}</p>}
+              {event.meetingLink && (
+                <Button size="sm" className="mt-2" onClick={() => window.open(event.meetingLink, "_blank", "noopener,noreferrer")}>
+                  Join Meeting
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
           <Button variant="outline" size="sm" className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10" onClick={onDelete}><Trash2 size={13} /> Delete</Button>
+          {event.meetingLink && <Button variant="outline" size="sm" onClick={() => window.open(event.meetingLink, "_blank", "noopener,noreferrer")}>Join</Button>}
           <Button size="sm" className="gap-1.5" onClick={onEdit}><Edit2 size={13} /> Edit</Button>
         </DialogFooter>
       </DialogContent>
@@ -281,7 +321,7 @@ function WeekView({ currentDate, events, onEventClick }: {
             return (
               <div key={d.toISOString()} className={cn("border-r last:border-r-0 p-0.5 space-y-0.5", d.toDateString() === today && "bg-primary/3")}>
                 {dayEvts.map(evt => (
-                  <div key={evt.id} className={cn("text-[9px] font-medium px-1 py-0.5 rounded cursor-pointer truncate border", EVENT_COLORS[evt.type] ?? "bg-blue-100 text-blue-700")} onClick={() => onEventClick(evt)}>
+                  <div key={evt.id} className={cn("text-[9px] font-medium px-1 py-0.5 rounded cursor-pointer truncate border", EVENT_COLORS[eventTypeKey(evt.type)] ?? "bg-blue-100 text-blue-700")} onClick={() => onEventClick(evt)}>
                     {evt.title}
                   </div>
                 ))}
@@ -328,8 +368,8 @@ function AgendaView({ events, onEventClick }: { events: CalendarEvent[]; onEvent
             </div>
             <div className="ml-13 pl-3 border-l-2 border-muted space-y-2 ml-5">
               {evts.map(evt => (
-                <div key={evt.id} className={cn("flex items-center gap-3 p-3 rounded-xl border cursor-pointer hover:shadow-sm transition-all", EVENT_COLORS[evt.type] ?? "bg-muted/30")} onClick={() => onEventClick(evt)}>
-                  <div className={cn("w-2 h-full rounded-full self-stretch min-h-[16px]", DOT_COLORS[evt.type] ?? "bg-blue-500")} />
+                <div key={evt.id} className={cn("flex items-center gap-3 p-3 rounded-xl border cursor-pointer hover:shadow-sm transition-all", EVENT_COLORS[eventTypeKey(evt.type)] ?? "bg-muted/30")} onClick={() => onEventClick(evt)}>
+                  <div className={cn("w-2 h-full rounded-full self-stretch min-h-[16px]", DOT_COLORS[eventTypeKey(evt.type)] ?? "bg-blue-500")} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate">{evt.title}</p>
                     <div className="flex items-center gap-2 mt-0.5">
@@ -433,7 +473,7 @@ export default function CalendarPage() {
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2"><CalendarDays size={26} className="text-primary" /> Calendar</h1>
         </div>
         <Button className="gap-2" onClick={() => { setEditingEvent(null); setShowAddDialog(true); }}>
-          <Plus size={16} /> Create Event
+          <Plus size={16} /> Add New Meeting
         </Button>
       </div>
 
@@ -502,8 +542,8 @@ export default function CalendarPage() {
                       </div>
                       <div className="space-y-0.5">
                         {dayEvents.slice(0, 3).map(evt => (
-                          <div key={evt.id} className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded cursor-pointer truncate border flex items-center gap-1", EVENT_COLORS[evt.type] ?? "bg-blue-100 text-blue-700 border-blue-200")} onClick={e => { e.stopPropagation(); handleEventClick(evt); }}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", DOT_COLORS[evt.type] ?? "bg-blue-500")} />
+                          <div key={evt.id} className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded cursor-pointer truncate border flex items-center gap-1", EVENT_COLORS[eventTypeKey(evt.type)] ?? "bg-blue-100 text-blue-700 border-blue-200")} onClick={e => { e.stopPropagation(); handleEventClick(evt); }}>
+                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", DOT_COLORS[eventTypeKey(evt.type)] ?? "bg-blue-500")} />
                             {evt.title}
                           </div>
                         ))}
@@ -548,7 +588,7 @@ export default function CalendarPage() {
                 <p className="text-xs text-muted-foreground text-center py-4">No events this month</p>
               ) : monthEvents.slice(0, 6).map(evt => (
                 <div key={evt.id} className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted/30 cursor-pointer transition-colors" onClick={() => handleEventClick(evt)}>
-                  <span className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", DOT_COLORS[evt.type] ?? "bg-blue-500")} />
+                  <span className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", DOT_COLORS[eventTypeKey(evt.type)] ?? "bg-blue-500")} />
                   <div className="min-w-0">
                     <p className="text-xs font-semibold truncate">{evt.title}</p>
                     <p className="text-[10px] text-muted-foreground">{evt.date}{evt.time ? ` · ${evt.time}` : ""}</p>
@@ -562,10 +602,12 @@ export default function CalendarPage() {
           <Card className="shadow-sm">
             <div className="p-4 border-b bg-muted/20"><h3 className="font-semibold text-sm">Calendar Filters</h3></div>
             <CardContent className="p-3 space-y-2">
-              {Object.entries(DOT_COLORS).map(([type, dot]) => (
+              {EVENT_TYPES.map(type => (
                 <label key={type} className="flex items-center gap-2.5 cursor-pointer group">
-                  <div className={cn("w-3 h-3 rounded-sm", dot.replace("bg-", "bg-").replace("-500", "-400"))} />
-                  <span className="text-xs font-medium group-hover:text-foreground text-muted-foreground capitalize">{type}</span>
+                  <div className={cn("h-5 w-5 rounded-md border flex items-center justify-center", EVENT_COLORS[type])}>
+                    <span className={cn("h-2 w-2 rounded-full", DOT_COLORS[type])} />
+                  </div>
+                  <span className="text-xs font-medium text-foreground">{type}</span>
                 </label>
               ))}
             </CardContent>

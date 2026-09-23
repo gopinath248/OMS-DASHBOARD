@@ -148,7 +148,7 @@ export const dmsLogin = async (loginInput: LoginInput, options?: RequestInit): P
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...options?.headers },
     body: JSON.stringify(
       loginInput,)
   }
@@ -373,7 +373,7 @@ export const dmsCreateUser = async (dmsUserInput: DmsUserInput, options?: Reques
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...options?.headers },
     body: JSON.stringify(
       dmsUserInput,)
   }
@@ -445,7 +445,7 @@ export const dmsUpdateUser = async (id: number,
   {
     ...options,
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...options?.headers },
     body: JSON.stringify(
       dmsUserUpdate,)
   }
@@ -670,7 +670,7 @@ export const dmsCreateProject = async (projectInput: ProjectInput, options?: Req
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...options?.headers },
     body: JSON.stringify(
       projectInput,)
   }
@@ -819,7 +819,7 @@ export const dmsUpdateProject = async (id: number,
   {
     ...options,
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...options?.headers },
     body: JSON.stringify(
       projectUpdate,)
   }
@@ -1479,7 +1479,6 @@ export function useDmsSearch<TData = Awaited<ReturnType<typeof dmsSearch>>, TErr
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
-
 
 
 

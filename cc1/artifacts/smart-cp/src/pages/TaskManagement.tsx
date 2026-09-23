@@ -61,9 +61,11 @@ const JIRA_COLUMNS = [
   { id: "In Progress",label: "In Progress", icon: Loader2,      topColor: "border-t-blue-500",   headerBg: "bg-blue-50/60",      badge: "bg-blue-200 text-blue-700" },
   { id: "Testing",    label: "Testing",     icon: FlaskConical, topColor: "border-t-yellow-500", headerBg: "bg-yellow-50/60",    badge: "bg-yellow-200 text-yellow-700" },
   { id: "Review",     label: "Review",      icon: Eye,          topColor: "border-t-purple-500", headerBg: "bg-purple-50/60",    badge: "bg-purple-200 text-purple-700" },
-  { id: "Done",       label: "Done",        icon: CheckCircle2, topColor: "border-t-green-500",  headerBg: "bg-green-50/60",     badge: "bg-green-200 text-green-700" },
   { id: "Blocked",    label: "Blocked",     icon: AlertCircle,  topColor: "border-t-red-500",    headerBg: "bg-red-50/60",       badge: "bg-red-200 text-red-700" },
+  { id: "Done",       label: "Done",        icon: CheckCircle2, topColor: "border-t-green-500",  headerBg: "bg-green-50/60",     badge: "bg-green-200 text-green-700" },
 ];
+const COLUMN_ORDER = Object.fromEntries(JIRA_COLUMNS.map((col, index) => [col.id, index]));
+const PRIORITY_ORDER: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
 /* ─── Helpers ────────────────────────────────────────────── */
 function normalizeToColumn(status: string): string {
@@ -90,6 +92,19 @@ function sp(priority: string) {
 function ticketId(id: string, type: string) {
   const m = ({ Bug: "BUG", Story: "IPM", Epic: "EPIC", Task: "TSK", Service: "SR" } as Record<string, string>)[type] ?? "TSK";
   return `CC26${m}-${id.replace(/\D/g, "").padStart(3, "0")}`;
+}
+
+function sortTasks(a: Task, b: Task) {
+  const col = (COLUMN_ORDER[a.column ?? "To Do"] ?? 0) - (COLUMN_ORDER[b.column ?? "To Do"] ?? 0);
+  if (col !== 0) return col;
+
+  const priority = (PRIORITY_ORDER[a.priority] ?? 99) - (PRIORITY_ORDER[b.priority] ?? 99);
+  if (priority !== 0) return priority;
+
+  const due = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+  if (due !== 0) return due;
+
+  return ticketId(a.id, a.ticketType ?? "Task").localeCompare(ticketId(b.id, b.ticketType ?? "Task"));
 }
 
 const COLUMN_OVERRIDES: Record<string, string> = {
@@ -249,7 +264,7 @@ function AssignDialog({ task, open, onClose, onSave }: {
             Assign <span className="font-semibold text-foreground">{task?.title}</span> to:
           </p>
           <Select value={assignee} onValueChange={setAssignee}>
-            <SelectTrigger><SelectValue placeholder="Select intern" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Select Intern" /></SelectTrigger>
             <SelectContent>
               {students.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
             </SelectContent>
@@ -401,7 +416,7 @@ function SubtaskDialog({ parentTask, open, onClose, onSave }: {
           <div className="space-y-1.5">
             <Label>Assign To</Label>
             <Select value={form.assignee} onValueChange={v => setForm(f => ({...f, assignee: v}))}>
-              <SelectTrigger><SelectValue placeholder="Select intern" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Select Intern" /></SelectTrigger>
               <SelectContent>{students.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -572,6 +587,16 @@ export default function TaskManagement() {
     title: "", description: "", assignedTo: "", priority: "Medium", dueDate: "", column: "To Do",
   });
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("createTicket") === "1") {
+      setCreateOpen(true);
+      params.delete("createTicket");
+      const nextSearch = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`);
+    }
+  }, []);
+
   const filtered = taskList.filter(t => {
     const q = searchTerm.toLowerCase();
     const matchSearch = !q || t.title.toLowerCase().includes(q) || t.assignedTo.toLowerCase().includes(q) ||
@@ -579,7 +604,7 @@ export default function TaskManagement() {
     const matchPriority = filterPriority === "all" || t.priority === filterPriority;
     const matchType     = filterType === "all"     || t.ticketType === filterType;
     return matchSearch && matchPriority && matchType;
-  });
+  }).sort(sortTasks);
 
   const handleAction = (taskId: string, action: string) => {
     const task = taskList.find(t => t.id === taskId) ?? null;
@@ -652,7 +677,6 @@ export default function TaskManagement() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Task Board</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Jira-style board · Sprint S01 · Jun 16 – Jun 30, 2026</p>
         </div>
         <div className="flex gap-2 items-center w-full sm:w-auto flex-wrap">
           {/* Search */}
@@ -730,13 +754,14 @@ export default function TaskManagement() {
 
       {/* ── Board / List ─────────────────────────────── */}
       {viewMode === "kanban" ? (
-        <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
+        <div className="overflow-x-auto pb-4 -mx-1 px-1">
+          <div className="grid grid-cols-6 gap-3 min-w-[1320px] h-[calc(100vh-20rem)] min-h-[460px]">
           {JIRA_COLUMNS.map(col => {
             const ColIcon = col.icon;
             const colTasks = filtered.filter(t => t.column === col.id);
             return (
-              <div key={col.id} className="w-[226px] shrink-0 flex flex-col">
-                <div className={cn("rounded-xl border border-t-4 overflow-hidden flex flex-col", col.topColor)}>
+              <div key={col.id} className="min-w-0 flex flex-col">
+                <div className={cn("rounded-xl border border-t-4 overflow-hidden flex flex-col h-full", col.topColor)}>
                   <div className={cn("flex items-center justify-between px-3 py-2.5 border-b shrink-0", col.headerBg)}>
                     <div className="flex items-center gap-1.5">
                       <ColIcon size={13} className="text-muted-foreground" />
@@ -746,7 +771,7 @@ export default function TaskManagement() {
                       {colTasks.length}
                     </span>
                   </div>
-                  <div className="flex-1 p-2 space-y-2 overflow-y-auto min-h-[280px] max-h-[calc(100vh-24rem)] bg-muted/10">
+                  <div className="flex-1 p-2 space-y-2 overflow-y-auto min-h-0 bg-muted/10">
                     <AnimatePresence>
                       {colTasks.map(task => (
                         <KanbanCard key={task.id} task={task} onAction={handleAction} />
@@ -762,6 +787,7 @@ export default function TaskManagement() {
               </div>
             );
           })}
+          </div>
         </div>
       ) : (
         <Card className="shadow-sm">
@@ -867,7 +893,7 @@ export default function TaskManagement() {
               <div className="space-y-1.5">
                 <Label>Assign To <span className="text-destructive">*</span></Label>
                 <Select value={newTask.assignedTo} onValueChange={v => setNewTask(f => ({...f, assignedTo: v}))}>
-                  <SelectTrigger><SelectValue placeholder="Select intern" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select Intern" /></SelectTrigger>
                   <SelectContent>{students.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>

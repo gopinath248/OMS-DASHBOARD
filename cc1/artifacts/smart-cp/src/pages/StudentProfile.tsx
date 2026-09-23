@@ -2,7 +2,7 @@ import { useParams, Link } from "wouter";
 import { ArrowLeft, Mail, Phone, MapPin, Calendar as CalendarIcon, Briefcase, BookOpen, User, Award, ShieldAlert, BarChart3, Clock, CheckCircle2, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -13,9 +13,35 @@ export default function StudentProfile() {
   const { id } = useParams<{ id: string }>();
   
   const student = students.find(s => s.id === id) || students[0];
+  if (!student) {
+    return (
+      <div className="space-y-6 pb-8">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="icon" asChild>
+            <Link href="/students"><ArrowLeft size={16} /></Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Intern Profile</h1>
+            <p className="text-muted-foreground mt-1">No intern record is available yet.</p>
+          </div>
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            No intern data found in smart_cp for this profile.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const perfData = performanceData.find(p => p.internId === student.id);
   const studentTasks = tasks.filter(t => t.assignedTo === student.name);
   const studentLeaves = leaveRequests.filter(l => l.internName === student.name);
+  const completedTaskCount = studentTasks.filter(t => t.status === "Completed").length;
+  const overallScore = perfData
+    ? Math.round((perfData.attendance + perfData.taskCompletion + perfData.communication + perfData.discipline + perfData.learning + perfData.innovation + perfData.leadership + perfData.collaboration) / 8)
+    : 0;
+  const resultStatus = overallScore >= 85 ? "Strong" : overallScore >= 70 ? "Satisfactory" : "Needs Support";
 
   const radarData = perfData ? [
     { subject: 'Attendance', A: perfData.attendance, fullMark: 100 },
@@ -45,6 +71,7 @@ export default function StudentProfile() {
         <div className="px-6 sm:px-10 pb-6">
           <div className="flex flex-col sm:flex-row gap-6 sm:items-end -mt-12 relative z-10">
             <Avatar className="h-24 w-24 border-4 border-card bg-card shadow-sm">
+              {student.avatarUrl && <AvatarImage src={student.avatarUrl} alt={student.name} />}
               <AvatarFallback className="text-3xl font-medium bg-primary/10 text-primary">
                 {student.name.split(' ').map(n => n[0]).join('')}
               </AvatarFallback>
@@ -76,12 +103,75 @@ export default function StudentProfile() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Overall Score</p>
+                <p className="text-2xl font-bold text-primary">{overallScore}%</p>
+              </div>
+              <div className="h-11 w-11 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                <BarChart3 size={20} />
+              </div>
+            </div>
+            <Progress value={overallScore} className="h-2 mt-4" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Result</p>
+                <p className="text-2xl font-bold">{resultStatus}</p>
+              </div>
+              <div className="h-11 w-11 rounded-full bg-green-500/10 text-green-600 flex items-center justify-center">
+                <Award size={20} />
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mt-4">Based on attendance, tasks, discipline, and growth metrics.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Task Report</p>
+                <p className="text-2xl font-bold">{completedTaskCount}/{studentTasks.length}</p>
+              </div>
+              <div className="h-11 w-11 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                <CheckCircle2 size={20} />
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mt-4">Completed tasks assigned only to {student.name}.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Project Progress</p>
+                <p className="text-2xl font-bold">{student.progress}%</p>
+              </div>
+              <div className="h-11 w-11 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                <Briefcase size={20} />
+              </div>
+            </div>
+            <Progress value={student.progress} className="h-2 mt-4" />
+          </CardContent>
+        </Card>
+      </div>
+
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="bg-card w-full justify-start rounded-lg border h-auto p-1 overflow-x-auto flex-nowrap">
           <TabsTrigger value="overview" className="py-2.5 px-4"><User size={16} className="mr-2" /> Overview</TabsTrigger>
           <TabsTrigger value="tasks" className="py-2.5 px-4"><CheckCircle2 size={16} className="mr-2" /> Tasks</TabsTrigger>
           <TabsTrigger value="leave" className="py-2.5 px-4"><CalendarIcon size={16} className="mr-2" /> Leave</TabsTrigger>
           <TabsTrigger value="performance" className="py-2.5 px-4"><TrendingUp size={16} className="mr-2" /> Performance</TabsTrigger>
+          <TabsTrigger value="reports" className="py-2.5 px-4"><BarChart3 size={16} className="mr-2" /> Reports</TabsTrigger>
         </TabsList>
 
         <div className="mt-6">
@@ -147,8 +237,8 @@ export default function StudentProfile() {
                       </div>
                       <div className="flex items-center gap-3 text-sm">
                         <User className="text-muted-foreground h-4 w-4" />
-                        <span className="text-muted-foreground w-24">Mentor</span>
-                        <span className="font-medium">{student.mentor}</span>
+                        <span className="text-muted-foreground w-24">manager</span>
+                        <span className="font-medium">{student.manager}</span>
                       </div>
                       <div className="flex items-center gap-3 text-sm">
                         <Clock className="text-muted-foreground h-4 w-4" />
@@ -260,7 +350,7 @@ export default function StudentProfile() {
                             <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
                               <PolarGrid stroke="hsl(var(--border))" />
                               <PolarAngleAxis dataKey="subject" tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
-                              <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                              <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                               <Radar name="Student" dataKey="A" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.4} />
                               <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderRadius: "8px" }} />
                             </RadarChart>
@@ -295,6 +385,74 @@ export default function StudentProfile() {
                   </CardContent>
                 </Card>
              </div>
+          </TabsContent>
+          <TabsContent value="reports" className="outline-none focus-visible:ring-0">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Performance Result</CardTitle>
+                  <CardDescription>Individual report for {student.name}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-center rounded-xl bg-primary/5 p-5">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Overall Score</p>
+                    <p className="text-4xl font-bold text-primary mt-1">
+                      {overallScore}%
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-lg border p-3">
+                      <p className="text-muted-foreground text-xs">Tasks</p>
+                      <p className="font-semibold">{completedTaskCount}/{studentTasks.length} completed</p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-muted-foreground text-xs">Leave Requests</p>
+                      <p className="font-semibold">{studentLeaves.length}</p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-muted-foreground text-xs">Project Progress</p>
+                      <p className="font-semibold">{student.progress}%</p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-muted-foreground text-xs">Status</p>
+                      <p className="font-semibold">{student.status}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle>Report Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>Attendance</span>
+                      <span className="font-semibold">{perfData?.attendance ?? 0}%</span>
+                    </div>
+                    <Progress value={perfData?.attendance ?? 0} className="h-2" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>Task Completion</span>
+                      <span className="font-semibold">{perfData?.taskCompletion ?? 0}%</span>
+                    </div>
+                    <Progress value={perfData?.taskCompletion ?? 0} className="h-2" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>Project Progress</span>
+                      <span className="font-semibold">{student.progress}%</span>
+                    </div>
+                    <Progress value={student.progress} className="h-2" />
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    This report belongs only to {student.name}. It combines their performance score, assigned task result, leave record, and current project progress.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </div>
       </Tabs>

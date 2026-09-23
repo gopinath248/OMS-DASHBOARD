@@ -1,5 +1,8 @@
-import app from "./app";
-import { logger } from "./lib/logger";
+import "./load-env";
+
+const { initializeDatabase } = await import("@workspace/db");
+const { default: app } = await import("./app");
+const { logger } = await import("./lib/logger");
 
 const rawPort = process.env["PORT"];
 
@@ -14,6 +17,8 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+await initializeDatabase();
 
 app.listen(port, (err) => {
   if (err) {

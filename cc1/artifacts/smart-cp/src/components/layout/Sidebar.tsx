@@ -4,18 +4,20 @@ import {
   LayoutDashboard, GraduationCap, Users, CalendarDays, ClipboardCheck,
   TrendingUp, BarChart3, Bell, Calendar, Settings, HelpCircle, LogOut,
   ChevronLeft, ChevronRight, FolderOpen, ChevronDown,
-  DollarSign, Briefcase, Layers, Kanban, MessageSquare, Archive,
-  Zap, BookOpen, Activity, LayoutTemplate,
+  IndianRupee, Briefcase, Layers, Kanban, MessageSquare,
+  Activity, LayoutTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion, AnimatePresence } from "framer-motion";
+import { clearAuthSession, type NavigationRole } from "@/lib/auth";
 
 interface SidebarProps {
   collapsed: boolean;
   setCollapsed: (v: boolean) => void;
-  role: string;
+  role: NavigationRole;
+  chatUnreadCount?: number;
 }
 
 const RESOURCE_LINKS = [
@@ -24,45 +26,41 @@ const RESOURCE_LINKS = [
   { href: "/performance",   label: "Performance",      icon: TrendingUp },
   { href: "/reports",       label: "Reports",          icon: BarChart3 },
   { href: "/leave",         label: "Leave",            icon: CalendarDays },
-  { href: "/salary",        label: "Salary",           icon: DollarSign },
+  { href: "/salary",        label: "Salary",           icon: IndianRupee },
   { href: "/calendar",      label: "Calendar",         icon: Calendar },
   { href: "/notifications", label: "Notifications",    icon: Bell },
   { href: "/settings",      label: "Settings",         icon: Settings },
-  { href: "/commands",      label: "Command Center",   icon: MessageSquare },
+  { href: "/commands",      label: "Chat Center",      icon: MessageSquare },
 ];
 
 const PLANYWAY_LINKS = [
-  { href: "/admin",    label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/planway",  label: "Sprint Planning", icon: Kanban },
-  { href: "/planway",  label: "Backlog",         icon: BookOpen },
-  { href: "/planway",  label: "Active Sprint",   icon: Zap },
-  { href: "/planway",  label: "Sprint Archive",  icon: Archive },
-  { href: "/tasks",    label: "Task Board",      icon: LayoutTemplate },
+  { href: "/admin/dashboard", label: "Dashboard",       icon: LayoutDashboard },
+  { href: "/planway/active",    label: "Sprint Management", icon: Kanban },
+  { href: "/tasks",                label: "Task Board",        icon: LayoutTemplate },
   { href: "/reports",  label: "Analytics",       icon: Activity },
-  { href: "/calendar", label: "Calendar",        icon: Calendar },
 ];
 
 const STAFF_LINKS = [
-  { href: "/staff-dashboard", label: "Dashboard",      icon: LayoutDashboard },
-  { href: "/students",        label: "My Interns",     icon: GraduationCap },
+  { href: "/employee/dashboard", label: "Dashboard",      icon: LayoutDashboard },
+  { href: "/students",        label: "My Interns",    icon: GraduationCap },
   { href: "/projects",        label: "Projects",       icon: FolderOpen },
   { href: "/tasks",           label: "Tasks",          icon: ClipboardCheck },
   { href: "/leave",           label: "Leave",          icon: CalendarDays },
   { href: "/calendar",        label: "Calendar",       icon: Calendar },
   { href: "/notifications",   label: "Notifications",  icon: Bell },
-  { href: "/commands",        label: "Command Center", icon: MessageSquare },
+  { href: "/commands",        label: "Chat Center",    icon: MessageSquare },
   { href: "/settings",        label: "Settings",       icon: Settings },
   { href: "/help",            label: "Help Center",    icon: HelpCircle },
 ];
 
 const STUDENT_LINKS = [
-  { href: "/student-dashboard", label: "Dashboard",      icon: LayoutDashboard },
+  { href: "/intern/dashboard", label: "Dashboard",      icon: LayoutDashboard },
   { href: "/projects",          label: "My Projects",    icon: FolderOpen },
   { href: "/tasks",             label: "My Tasks",       icon: ClipboardCheck },
   { href: "/apply-leave",       label: "Apply Leave",    icon: CalendarDays },
   { href: "/calendar",          label: "Calendar",       icon: Calendar },
   { href: "/notifications",     label: "Notifications",  icon: Bell },
-  { href: "/commands",          label: "Command Center", icon: MessageSquare },
+  { href: "/commands",          label: "Chat Center",    icon: MessageSquare },
   { href: "/settings",          label: "Settings",       icon: Settings },
   { href: "/help",              label: "Help Center",    icon: HelpCircle },
 ];
@@ -70,14 +68,15 @@ const STUDENT_LINKS = [
 const STORAGE_RESOURCE = "sidebar-resource-open";
 const STORAGE_PLANYWAY = "sidebar-planyway-open";
 
-function NavLink({ href, label, icon: Icon, active, collapsed }: {
-  href: string; label: string; icon: React.ElementType; active: boolean; collapsed: boolean;
+function NavLink({ href, label, icon: Icon, active, collapsed, badgeCount = 0 }: {
+  href: string; label: string; icon: React.ElementType; active: boolean; collapsed: boolean; badgeCount?: number;
 }) {
+  const displayBadge = badgeCount > 0;
   const el = (
     <Link
       href={href}
       className={cn(
-        "flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium",
+        "relative flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium",
         collapsed ? "justify-center p-2.5" : "px-3 py-2",
         active
           ? "bg-primary text-primary-foreground shadow-sm"
@@ -86,6 +85,16 @@ function NavLink({ href, label, icon: Icon, active, collapsed }: {
     >
       <Icon size={17} className="shrink-0" />
       {!collapsed && <span className="truncate text-[13px]">{label}</span>}
+      {displayBadge && (
+        <span
+          className={cn(
+            "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold leading-none text-white",
+            collapsed && "absolute right-0 top-0 h-4 min-w-4 translate-x-0.5 -translate-y-0.5 px-1 text-[9px]"
+          )}
+        >
+          {badgeCount > 99 ? "99+" : badgeCount}
+        </span>
+      )}
     </Link>
   );
   if (collapsed) {
@@ -116,6 +125,7 @@ function AccordionGroup({
           : "text-secondary-foreground/50 hover:text-secondary-foreground/80",
         collapsed ? "justify-center p-2.5" : "px-2.5 py-2 justify-between"
       )}
+      aria-expanded={open}
     >
       <div className="flex items-center gap-2">
         <Icon size={13} className="shrink-0" />
@@ -129,7 +139,11 @@ function AccordionGroup({
         )}
       </div>
       {!collapsed && (
-        <motion.div animate={{ rotate: open ? 0 : -90 }} transition={{ duration: 0.2 }}>
+        <motion.div
+          animate={{ rotate: open ? 0 : -90 }}
+          transition={{ duration: 0.2 }}
+          className={cn("rounded-full p-0.5", open && "bg-secondary-foreground/10")}
+        >
           <ChevronDown size={13} />
         </motion.div>
       )}
@@ -167,7 +181,7 @@ function AccordionGroup({
   );
 }
 
-export function Sidebar({ collapsed, setCollapsed, role }: SidebarProps) {
+export function Sidebar({ collapsed, setCollapsed, role, chatUnreadCount = 0 }: SidebarProps) {
   const [location] = useLocation();
 
   const [resourceOpen, setResourceOpen] = useState<boolean>(() => {
@@ -194,9 +208,34 @@ export function Sidebar({ collapsed, setCollapsed, role }: SidebarProps) {
   const effectiveResourceOpen = collapsed ? true : resourceOpen;
   const effectivePlanwayOpen  = collapsed ? true : planwayOpen;
 
-  const isActive = (href: string) => location === href;
+  const currentPath = location.split("?")[0];
+  const currentTab = currentPath.startsWith("/planway/")
+    ? currentPath.split("/")[2]
+    : new URLSearchParams(window.location.search).get("tab") ?? "active";
+  const isActive = (href: string) => {
+    const [path, query = ""] = href.split("?");
+    if (path === currentPath) return true;
+    if (currentPath === "/planway" && path === "/planway/active") return true;
+    if (path !== "/planway" || !currentPath.startsWith("/planway")) return false;
 
-  const roleLabel = role === "student" ? "Intern" : role === "staff" ? "Employee" : "Admin";
+    const tab = new URLSearchParams(query).get("tab");
+    return tab ? currentTab === tab : true;
+  };
+
+  const roleLabel =
+    role === "intern" ? "Intern" :
+    role === "employee" ? "Employee" :
+    role === "hr" ? "HR" :
+    role === "manager" ? "manager" :
+    "Admin";
+
+  const navBadge = (href: string) => href === "/commands" ? chatUnreadCount : 0;
+
+  const handleLogout = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    clearAuthSession();
+    window.location.replace("/login");
+  };
 
   return (
     <aside
@@ -208,20 +247,20 @@ export function Sidebar({ collapsed, setCollapsed, role }: SidebarProps) {
       {/* ── Logo ──────────────────────────────────── */}
       <div className={cn(
         "flex items-center border-b border-secondary-foreground/10 shrink-0 overflow-hidden relative",
-        collapsed ? "h-16 justify-center px-2" : "h-[80px] px-3 gap-2.5"
+        collapsed ? "h-16 justify-center px-2" : "h-[84px] px-3 gap-2"
       )}>
         <img
           src="/company-logo.png"
-          alt="Code Core Global"
+          alt="CODE CORE"
           className={cn(
             "object-contain shrink-0 transition-all duration-300",
-            collapsed ? "h-9 w-auto" : "h-12 w-auto"
+            collapsed ? "h-10 w-auto" : "h-14 w-auto"
           )}
         />
         {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-extrabold text-white leading-snug tracking-wide uppercase">Corecode Global</p>
-            <p className="text-[11px] font-extrabold leading-tight mt-0.5 tracking-[0.2em] uppercase" style={{ color: "#D4AF37" }}>PLANWAY</p>
+          <div className="min-w-0 flex-1 leading-none">
+            <p className="text-[11px] font-bold text-white leading-tight tracking-[0.08em] uppercase">CODE CORE</p>
+            <p className="text-[10px] font-bold leading-tight mt-1 tracking-[0.18em] uppercase" style={{ color: "#D4AF37" }}>PLANYWAY</p>
           </div>
         )}
         <Button
@@ -244,14 +283,15 @@ export function Sidebar({ collapsed, setCollapsed, role }: SidebarProps) {
           {role === "admin" && (
             <>
               <AccordionGroup
-                label="Intern Management"
+                label="Resource Management"
                 icon={Briefcase}
                 open={effectiveResourceOpen}
                 onToggle={toggleResource}
                 collapsed={collapsed}
+                gold
               >
                 {RESOURCE_LINKS.map(l => (
-                  <NavLink key={l.label} {...l} active={isActive(l.href)} collapsed={collapsed} />
+                  <NavLink key={l.label} {...l} active={isActive(l.href)} collapsed={collapsed} badgeCount={navBadge(l.href)} />
                 ))}
               </AccordionGroup>
 
@@ -266,20 +306,24 @@ export function Sidebar({ collapsed, setCollapsed, role }: SidebarProps) {
                 gold
               >
                 {PLANYWAY_LINKS.map(l => (
-                  <NavLink key={l.label} {...l} active={isActive(l.href)} collapsed={collapsed} />
+                  <NavLink key={l.label} {...l} active={isActive(l.href)} collapsed={collapsed} badgeCount={navBadge(l.href)} />
                 ))}
               </AccordionGroup>
             </>
           )}
 
-          {/* STAFF / EMPLOYEE */}
-          {role === "staff" && STAFF_LINKS.map(l => (
-            <NavLink key={l.label} {...l} active={isActive(l.href)} collapsed={collapsed} />
-          ))}
+          {/* STAFF / EMPLOYEE / HR / manager */}
+          {(["employee", "hr", "manager"] as NavigationRole[]).includes(role) && STAFF_LINKS.map(l => {
+            const href =
+              l.href === "/employee/dashboard" && role === "hr" ? "/hr/dashboard" :
+              l.href === "/employee/dashboard" && role === "manager" ? "/manager/dashboard" :
+              l.href;
+            return <NavLink key={l.label} {...l} href={href} active={isActive(href)} collapsed={collapsed} badgeCount={navBadge(href)} />;
+          })}
 
-          {/* STUDENT / INTERN */}
-          {role === "student" && STUDENT_LINKS.map(l => (
-            <NavLink key={l.label} {...l} active={isActive(l.href)} collapsed={collapsed} />
+          {/* Intern */}
+          {role === "intern" && STUDENT_LINKS.map(l => (
+            <NavLink key={l.label} {...l} active={isActive(l.href)} collapsed={collapsed} badgeCount={navBadge(l.href)} />
           ))}
         </nav>
       </div>
@@ -298,7 +342,7 @@ export function Sidebar({ collapsed, setCollapsed, role }: SidebarProps) {
           <TooltipTrigger asChild>
             <Link
               href="/login"
-              onClick={() => localStorage.removeItem("role")}
+              onClick={handleLogout}
               className={cn(
                 "flex items-center gap-3 rounded-md text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-colors",
                 collapsed ? "justify-center p-2.5" : "px-3 py-2.5"

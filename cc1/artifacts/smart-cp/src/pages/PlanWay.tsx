@@ -823,7 +823,13 @@ export default function PlanWay() {
               {sprintsData.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.status})</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button size="sm" className="gap-1.5 h-8 text-xs"><Plus size={13} /> New Ticket</Button>
+          <Button
+            size="sm"
+            className="gap-1.5 h-8 text-xs"
+            onClick={() => window.location.assign("/tasks?createTicket=1")}
+          >
+            <Plus size={13} /> New Ticket
+          </Button>
         </div>
       </div>
 

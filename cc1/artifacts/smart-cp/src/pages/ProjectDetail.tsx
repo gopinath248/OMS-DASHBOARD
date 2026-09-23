@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { getAuthSession, roleToNavigationRole } from "@/lib/auth";
 import {
   projects, projectDocuments, staff, students,
   ProjectDocument, ProjectStatus
@@ -61,6 +62,108 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function safeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "-");
+}
+
+function pdfText(value: string | number) {
+  return String(value)
+    .replace(/[^\x20-\x7E]/g, "-")
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+}
+
+function htmlText(value: string | number) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function downloadBlob(filename: string, content: BlobPart, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildSimplePdf(title: string, lines: string[]) {
+  const content = [
+    "BT",
+    "/F1 20 Tf",
+    "72 770 Td",
+    `(${pdfText("CODE CORE PLANYWAY")}) Tj`,
+    "/F1 14 Tf",
+    "0 -34 Td",
+    `(${pdfText(title)}) Tj`,
+    "/F1 11 Tf",
+    ...lines.flatMap(line => ["0 -20 Td", `(${pdfText(line)}) Tj`]),
+    "ET",
+  ].join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach(offset => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return pdf;
+}
+
+function downloadProjectDocument(doc: ProjectDocument) {
+  const lines = [
+    `Document ID: ${doc.id}`,
+    `File name: ${doc.fileName}`,
+    `File type: ${doc.fileType.toUpperCase()}`,
+    `Uploaded by: ${doc.uploadedBy}`,
+    `Upload date: ${formatDate(doc.uploadDate)}`,
+    `Size: ${doc.sizeMB} MB`,
+    "",
+    "This is a local dummy document generated for testing in CODE CORE PLANYWAY.",
+  ];
+
+  if (doc.fileType === "pdf") {
+    downloadBlob(doc.fileName, buildSimplePdf(doc.title, lines), "application/pdf");
+    return;
+  }
+
+  const nameWithoutExtension = doc.fileName.replace(/\.[^.]+$/, "");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${htmlText(doc.title)}</title><style>
+    body{font-family:Arial,sans-serif;margin:0;background:#f4f7fb;color:#111827}
+    .page{max-width:900px;margin:32px auto;background:#fff;border:1px solid #d8dee9;border-radius:16px;padding:32px;position:relative;overflow:hidden}
+    .page:before{content:"CODE CORE";position:absolute;right:24px;bottom:18px;font-size:64px;font-weight:900;color:#0f2f6e;opacity:.05}
+    .brand{display:flex;align-items:center;gap:14px;border-bottom:3px solid #d4af37;padding-bottom:16px;margin-bottom:24px}
+    .logo{width:54px;height:54px;border-radius:14px;background:#0f2f6e;color:#d4af37;display:flex;align-items:center;justify-content:center;font-weight:900;letter-spacing:1px}
+    h1{margin:0;font-size:22px}.sub{color:#64748b;font-size:12px;margin-top:4px}
+    table{border-collapse:collapse;width:100%;font-size:13px}td{border:1px solid #e5e7eb;padding:10px 12px}td:first-child{font-weight:700;background:#f8fafc;width:180px}
+  </style></head><body><div class="page"><div class="brand"><div class="logo">CC</div><div><h1>${htmlText(doc.title)}</h1><div class="sub">CODE CORE PLANYWAY Document Preview</div></div></div>
+  <table><tbody>${lines.filter(Boolean).map(line => {
+    const [label, ...rest] = line.split(": ");
+    return `<tr><td>${htmlText(label)}</td><td>${htmlText(rest.join(": ") || "-")}</td></tr>`;
+  }).join("")}</tbody></table></div></body></html>`;
+  downloadBlob(`${safeFileName(nameWithoutExtension)}.html`, html, "text/html;charset=utf-8");
+}
+
 function DocumentRow({
   doc, role, onDelete
 }: { doc: ProjectDocument; role: string; onDelete: (id: string) => void }) {
@@ -89,12 +192,7 @@ function DocumentRow({
           variant="ghost"
           className="h-7 w-7 text-muted-foreground hover:text-primary"
           title="Download"
-          onClick={() => {
-            const a = document.createElement("a");
-            a.href = "#";
-            a.download = doc.fileName;
-            a.click();
-          }}
+          onClick={() => downloadProjectDocument(doc)}
         >
           <Download size={14} />
         </Button>
@@ -116,7 +214,8 @@ function DocumentRow({
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
-  const role = localStorage.getItem("role") || "admin";
+  const session = getAuthSession();
+  const role = session ? roleToNavigationRole(session.user.role) : "intern";
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -220,7 +319,6 @@ export default function ProjectDetail() {
             <StatusBadge status={project.status} />
             <Badge variant="outline">{project.category}</Badge>
           </div>
-          <p className="text-muted-foreground text-sm">{project.description}</p>
         </div>
       </div>
 
@@ -285,7 +383,7 @@ export default function ProjectDetail() {
                 <FileText size={16} /> Documents
                 <Badge variant="secondary" className="ml-1">{docs.length}</Badge>
               </CardTitle>
-              {(role === "admin" || role === "staff") && (
+              {(role === "admin" || role === "employee") && (
                 <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => setShowUploadDialog(true)}>
                   <Upload size={13} /> Upload
                 </Button>
@@ -308,7 +406,7 @@ export default function ProjectDetail() {
                 <div className="text-center py-10 text-muted-foreground">
                   <FileText size={36} className="mx-auto mb-2 opacity-30" />
                   <p className="text-sm font-medium">{docs.length === 0 ? "No documents uploaded yet" : "No documents match your search"}</p>
-                  {(role === "admin" || role === "staff") && docs.length === 0 && (
+                  {(role === "admin" || role === "employee") && docs.length === 0 && (
                     <Button variant="outline" size="sm" className="mt-3 gap-1.5" onClick={() => setShowUploadDialog(true)}>
                       <Upload size={13} /> Upload First Document
                     </Button>
@@ -373,7 +471,7 @@ export default function ProjectDetail() {
             </CardHeader>
             <CardContent>
               {assignedStudentData.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No interns assigned.</p>
+                <p className="text-sm text-muted-foreground">No Interns assigned.</p>
               ) : (
                 <div className="space-y-3">
                   {assignedStudentData.map(s => (

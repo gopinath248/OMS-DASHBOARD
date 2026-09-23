@@ -19,6 +19,7 @@ import {
   projects as initialProjects, projectDocuments, students,
   Project, ProjectStatus, ProjectCategory
 } from "@/data/mockData";
+import { getAuthSession, roleToNavigationRole } from "@/lib/auth";
 
 const STATUS_CONFIG: Record<ProjectStatus, { color: string; icon: React.ElementType; bg: string }> = {
   Active:    { color: "text-green-700",  bg: "bg-green-100",  icon: CheckCircle2 },
@@ -102,8 +103,10 @@ function ProjectCard({ project, docCount, role }: { project: Project; docCount: 
             </div>
             <StatusBadge status={project.status} />
           </div>
-          <h3 className="font-bold text-base leading-tight mb-1 group-hover:text-primary transition-colors">{project.name}</h3>
-          <p className="text-xs text-muted-foreground mb-4 line-clamp-2">{project.description}</p>
+          <button type="button" className="block text-left" onClick={() => navigate(`/projects/${project.id}`)}>
+            <h3 className="font-bold text-base leading-tight mb-1 hover:text-primary transition-colors">{project.name}</h3>
+            <p className="text-xs text-muted-foreground mb-4 line-clamp-2 hover:text-foreground">{project.description}</p>
+          </button>
           <div className="space-y-1.5 text-xs text-muted-foreground mb-4">
             <div className="flex items-center gap-1.5">
               <User size={11} className="shrink-0" />
@@ -331,11 +334,9 @@ function CompletedPlanCard({ project }: { project: Project }) {
   );
 }
 
-function StudentProjectsView({ allProjects }: { allProjects: Project[] }) {
-  const MY_STUDENT_ID = "STU001";
-
+function StudentProjectsView({ allProjects, internId }: { allProjects: Project[]; internId: string }) {
   const myActiveProjects = allProjects.filter(p =>
-    p.status === "Active" && p.assignedInterns.includes(MY_STUDENT_ID)
+    p.status === "Active" && p.assignedInterns.includes(internId)
   );
   const activePlans = allProjects.filter(p =>
     p.status === "Active" || p.status === "Planning"
@@ -503,7 +504,8 @@ function AddProjectDialog({ open, onClose, onAdd }: AddProjectDialogProps) {
 }
 
 export default function Projects() {
-  const role = localStorage.getItem("role") || "admin";
+  const session = getAuthSession();
+  const role = session ? roleToNavigationRole(session.user.role) : "admin";
   const [allProjects, setAllProjects] = useState<Project[]>(initialProjects);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<ProjectStatus | "All">("All");
@@ -511,8 +513,13 @@ export default function Projects() {
   const [showFilters, setShowFilters] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
 
-  if (role === "student") {
-    return <StudentProjectsView allProjects={allProjects} />;
+  if (role === "intern") {
+    const internRecord = students.find(student =>
+      student.userId === session?.user.userId ||
+      student.id === session?.user.userId ||
+      (!!session?.user.email && student.email.toLowerCase() === session.user.email.toLowerCase())
+    );
+    return <StudentProjectsView allProjects={allProjects} internId={internRecord?.id ?? session?.user.userId ?? ""} />;
   }
 
   const docCountFor = (id: string) => projectDocuments.filter(d => d.projectId === id).length;
@@ -536,9 +543,8 @@ export default function Projects() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Projects Repository</h1>
-          <p className="text-muted-foreground mt-1">Browse, manage, and collaborate on intern projects.</p>
         </div>
-        {(role === "admin" || role === "staff") && (
+        {(role === "admin" || role === "employee") && (
           <Button className="gap-2 shrink-0" onClick={() => setShowAddDialog(true)}>
             <Plus size={16} /> Add Project
           </Button>

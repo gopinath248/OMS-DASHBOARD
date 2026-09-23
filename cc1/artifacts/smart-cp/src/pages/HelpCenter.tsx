@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Search, Book, MessageCircle, Video, LifeBuoy, FileText,
   ChevronRight, CheckCircle2, Send, BookOpen, HelpCircle,
@@ -18,20 +18,22 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
+import { getAuthSession } from "@/lib/auth";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 const FAQS = [
   { category: "Account", q: "How do I reset my password?", a: "Go to Settings → Security, enter your current password, and set a new one. If you've forgotten it, click 'Forgot Password' on the login page and follow the email instructions." },
-  { category: "Leave", q: "How do I apply for leave?", a: "Navigate to 'Apply Leave' in the sidebar. Select your leave type, enter start/end dates, write your reason, and click Submit. Your mentor will be notified and will approve or reject the request." },
-  { category: "Performance", q: "Where can I view my performance score?", a: "Go to your Student Dashboard or the Performance Management page. Your score is calculated across 8 metrics: Attendance, Tasks, Communication, Discipline, Learning, Innovation, Leadership, and Collaboration." },
-  { category: "Shifts", q: "How do I request a shift change?", a: "Open Shift Management and click 'Request Shift Change'. Choose your preferred shift, set the effective date, and submit a reason. Your coordinator will review within 24 hours." },
+  { category: "Leave", q: "How do I apply for leave?", a: "Navigate to 'Apply Leave' in the sidebar. Select your leave type, enter start/end dates, write your reason, and click Submit. Your manager will be notified and will approve or reject the request." },
+  { category: "Performance", q: "Where can I view my performance score?", a: "Go to your Intern Dashboard or the Performance Management page. Your score is calculated across 8 metrics: Attendance, Tasks, Communication, Discipline, Learning, Innovation, Leadership, and Collaboration." },
+  { category: "Shifts", q: "How do I request a shift change?", a: "Open Shift Management and click 'Request Shift Change'. Choose your preferred shift, set the effective date, and submit a reason. Your Specialist will review within 24 hours." },
   { category: "Reports", q: "Can I export my performance report?", a: "Yes — go to Reports & Analytics, select 'Performance Report', set your date range and department filters, then click the 'Export PDF' button at the top right." },
   { category: "Tasks", q: "How do I update a task status?", a: "Visit Task Management and switch to Kanban view. Drag cards between columns (To Do → In Progress → Review → Completed) to update status. In List view, you can also filter by status." },
   { category: "Notifications", q: "Why am I not receiving notifications?", a: "Check your Notifications page and ensure all categories are toggled on in Settings → Notifications. The bell icon in the top bar always shows the real-time unread count." },
   { category: "Account", q: "How do I update my profile information?", a: "Go to Settings from the sidebar. Update your name, email, department, and profile picture in the Profile section, then click Save Changes." },
   { category: "Leave", q: "What happens after my leave is approved?", a: "You receive a notification in the system. Your attendance record is updated automatically for those days. You can track the status any time in the Leave Management page." },
-  { category: "Tasks", q: "Who assigns tasks to me?", a: "Tasks are assigned by your mentor or the admin. You'll receive a notification when a new task is assigned. Check the Task Management page for full details and deadlines." },
+  { category: "Tasks", q: "Who assigns tasks to me?", a: "Tasks are assigned by your manager or the admin. You'll receive a notification when a new task is assigned. Check the Task Management page for full details and deadlines." },
 ];
 
 const KB_ARTICLES = [
@@ -39,10 +41,10 @@ const KB_ARTICLES = [
   { id: 2, title: "Understanding Your Performance Score", category: "Performance", tags: ["score", "metrics", "rating"], views: 189, content: "Your performance is scored across 8 metrics: Attendance, Task Completion, Communication, Discipline, Learning, Innovation, Leadership, and Collaboration. Each is weighted equally." },
   { id: 3, title: "Leave Application Process", category: "Leave", tags: ["apply", "approval", "types"], views: 312, content: "Step-by-step guide to applying for casual, sick, personal, or emergency leave. Includes information about approval workflows and leave balance management." },
   { id: 4, title: "Task Management & Kanban Board", category: "Tasks", tags: ["kanban", "status", "priority"], views: 156, content: "How to use the Kanban board to manage your tasks. Learn to move tasks across columns, set priorities, and track deadlines effectively." },
-  { id: 5, title: "Shift Management Guide", category: "Shifts", tags: ["schedule", "shift-change", "approve"], views: 98, content: "How to view your assigned shifts, request shift changes, and get approvals from your coordinator. Includes rules around shift swap policies." },
+  { id: 5, title: "Shift Management Guide", category: "Shifts", tags: ["schedule", "shift-change", "approve"], views: 98, content: "How to view your assigned shifts, request shift changes, and get approvals from your Specialist. Includes rules around shift swap policies." },
   { id: 6, title: "Notification Settings & Preferences", category: "Notifications", tags: ["alerts", "email", "settings"], views: 143, content: "Customize which notifications you receive and how. Control alerts for tasks, leave updates, performance reviews, and system announcements." },
   { id: 7, title: "Exporting Reports & Analytics", category: "Reports", tags: ["export", "pdf", "analytics"], views: 87, content: "Learn how to generate and export attendance, performance, task completion, and program completion reports in PDF or Excel formats." },
-  { id: 8, title: "Role-Based Access Explained", category: "Account", tags: ["admin", "staff", "student", "roles"], views: 201, content: "Understand what each role (Admin, Staff, Student) can access in the system. Includes a complete feature matrix and permission guide." },
+  { id: 8, title: "Role-Based Access Explained", category: "Account", tags: ["admin", "employee", "intern", "roles"], views: 201, content: "Understand what each role (Admin, Employee, Intern) can access in the system. Includes a complete feature matrix and permission guide." },
 ];
 
 const TUTORIALS = [
@@ -55,11 +57,11 @@ const TUTORIALS = [
 ];
 
 const ONBOARDING_STEPS = [
-  { icon: GraduationCap, title: "1. Complete Your Profile", desc: "Go to Settings and fill in your name, department, email, and profile photo. This helps mentors and admins identify you.", link: "/settings", linkLabel: "Open Settings" },
+  { icon: GraduationCap, title: "1. Complete Your Profile", desc: "Go to Settings and fill in your name, department, email, and profile photo. This helps managers and admins identify you.", link: "/settings", linkLabel: "Open Settings" },
   { icon: ClipboardList, title: "2. Check Your Assigned Tasks", desc: "Visit the Task Management page to see tasks assigned to you. Move them through the Kanban board as you progress.", link: "/tasks", linkLabel: "View Tasks" },
   { icon: CalendarIcon, title: "3. Know Your Shift", desc: "Open Shift Management to view your assigned schedule. If you need a change, submit a shift change request.", link: "/shifts", linkLabel: "View Shifts" },
-  { icon: BarChart2, title: "4. Track Your Performance", desc: "Your performance score is updated regularly across 8 metrics. View it anytime from the Student Dashboard.", link: "/student-dashboard", linkLabel: "View Dashboard" },
-  { icon: CalendarDays, title: "5. Apply for Leave When Needed", desc: "Use Apply Leave to submit casual, sick, or emergency leave. Your mentor will receive an instant notification.", link: "/apply-leave", linkLabel: "Apply Leave" },
+  { icon: BarChart2, title: "4. Track Your Performance", desc: "Your performance score is updated regularly across 8 metrics. View it anytime from the Intern Dashboard.", link: "/intern/dashboard", linkLabel: "View Dashboard" },
+  { icon: CalendarDays, title: "5. Apply for Leave When Needed", desc: "Use Apply Leave to submit casual, sick, or emergency leave. Your manager will receive an instant notification.", link: "/apply-leave", linkLabel: "Apply Leave" },
   { icon: Bell, title: "6. Stay Notified", desc: "Check the bell icon and Notifications page regularly for task updates, leave approvals, and announcements.", link: "/notifications", linkLabel: "View Notifications" },
   { icon: Settings2, title: "7. Customize Your Settings", desc: "Adjust theme (dark/light), notification preferences, and profile settings from the Settings page.", link: "/settings", linkLabel: "Go to Settings" },
 ];
@@ -92,6 +94,7 @@ type Panel = "getting-started" | "tutorials" | "knowledge-base" | "tickets" | nu
 
 export default function HelpCenter() {
   const { toast } = useToast();
+  const ticketStorageKey = `help-center-tickets:${getAuthSession()?.user.userId ?? getAuthSession()?.user.email ?? "anonymous"}`;
 
   // Panels / Modals
   const [panel, setPanel] = useState<Panel>(null);
@@ -114,18 +117,32 @@ export default function HelpCenter() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [attachment, setAttachment] = useState<string | null>(null);
-  const [ticketHistory, setTicketHistory] = useState<TicketRecord[]>([
-    { id: "CCT-2024-8821", name: "Alice Johnson", email: "alice@codecore.edu", category: "Technical Issue", subject: "Dashboard not loading", priority: "High", message: "The admin dashboard shows a blank screen on login.", status: "Resolved", createdAt: "2024-05-14", attachment: undefined },
-    { id: "CCT-2024-4432", name: "Alice Johnson", email: "alice@codecore.edu", category: "Leave & Attendance", subject: "Attendance not updated after leave", priority: "Medium", message: "My approved leave days still show as absent.", status: "Closed", createdAt: "2024-05-20", attachment: undefined },
-  ]);
+  const [ticketHistory, setTicketHistory] = useState<TicketRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(ticketStorageKey);
+      if (saved) return JSON.parse(saved) as TicketRecord[];
+    } catch (error) {
+      console.error("Unable to load help-center ticket history.", error);
+    }
+    return [];
+  });
   const [submitted, setSubmitted] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<TicketRecord | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Contact modal
   const [contactOpen, setContactOpen] = useState(false);
   const [contactForm, setContactForm] = useState({ name: "", email: "", message: "" });
   const [contactSent, setContactSent] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ticketStorageKey, JSON.stringify(ticketHistory));
+    } catch (error) {
+      console.error("Unable to persist help-center ticket history.", error);
+    }
+  }, [ticketHistory, ticketStorageKey]);
 
   const kbCategories = ["All", ...Array.from(new Set(KB_ARTICLES.map(a => a.category)))];
   const filteredKb = KB_ARTICLES.filter(a => {
@@ -270,8 +287,8 @@ export default function HelpCenter() {
           </div>
           <div className="pt-4 space-y-3 border-t">
             <h3 className="font-semibold text-sm">Contact Us Directly</h3>
-            <a href="mailto:support@codecore.edu" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-primary transition-colors">
-              <div className="p-2 bg-muted rounded-lg"><Mail size={13} /></div> support@codecore.edu
+            <a href="mailto:support@cc.local" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-primary transition-colors">
+              <div className="p-2 bg-muted rounded-lg"><Mail size={13} /></div> support@cc.local
             </a>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <div className="p-2 bg-muted rounded-lg"><Phone size={13} /></div> +91 9876543210
@@ -298,7 +315,10 @@ export default function HelpCenter() {
               <p className="text-sm text-muted-foreground">We'll respond within 24 hours to <strong>{form.email}</strong>.</p>
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => { setSubmitted(false); setForm({ name: "", email: "", category: "", subject: "", priority: "", message: "" }); setAttachment(null); }}>New Ticket</Button>
-                <Button onClick={() => setShowHistory(true)}>View Ticket History</Button>
+                <Button onClick={() => {
+                  setShowHistory(true);
+                  document.getElementById("ticket-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}>View Ticket History</Button>
               </div>
             </CardContent>
           ) : (
@@ -322,7 +342,7 @@ export default function HelpCenter() {
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="t-email">Email Address *</Label>
-                      <Input id="t-email" type="email" placeholder="you@codecore.edu" value={form.email} onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setErrors(ev => ({ ...ev, email: "" })); }} className={errors.email ? "border-destructive" : ""} />
+                      <Input id="t-email" type="email" placeholder="you@cc.local" value={form.email} onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setErrors(ev => ({ ...ev, email: "" })); }} className={errors.email ? "border-destructive" : ""} />
                       {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
                     </div>
                   </div>
@@ -392,7 +412,7 @@ export default function HelpCenter() {
       </div>
 
       {/* Ticket History */}
-      <div className="border rounded-xl overflow-hidden">
+      <div id="ticket-history" className="border rounded-xl overflow-hidden">
         <button
           className="w-full flex items-center justify-between px-5 py-4 bg-muted/30 hover:bg-muted/50 transition-colors"
           onClick={() => setShowHistory(h => !h)}
@@ -421,7 +441,18 @@ export default function HelpCenter() {
                     <td className="px-4 py-3 max-w-[180px] truncate">{t.subject}</td>
                     <td className="px-4 py-3 text-muted-foreground">{t.category}</td>
                     <td className="px-4 py-3"><Badge className={`text-[10px] h-4 px-1.5 ${PRIORITY_COLOR[t.priority] ?? ""}`}>{t.priority}</Badge></td>
-                    <td className="px-4 py-3"><Badge variant="outline" className={`text-[10px] h-5 px-1.5 ${STATUS_COLOR[t.status] ?? ""}`}>{t.status}</Badge></td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        aria-label={`View details for ticket ${t.id}`}
+                        onClick={() => setSelectedTicket(t)}
+                        className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Badge variant="outline" className={`cursor-pointer text-[10px] h-5 px-1.5 ${STATUS_COLOR[t.status] ?? ""}`}>
+                          {t.status}
+                        </Badge>
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs">{t.createdAt}</td>
                   </tr>
                 ))}
@@ -430,6 +461,47 @@ export default function HelpCenter() {
           </div>
         )}
       </div>
+
+      <Dialog open={selectedTicket !== null} onOpenChange={open => { if (!open) setSelectedTicket(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ticket Details</DialogTitle>
+            <DialogDescription>Current status and information for ticket {selectedTicket?.id}.</DialogDescription>
+          </DialogHeader>
+          {selectedTicket && (
+            <div className="space-y-4 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Ticket ID</span>
+                <span className="font-mono font-semibold text-primary">{selectedTicket.id}</span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-muted-foreground">Subject</span>
+                <span className="text-right font-medium">{selectedTicket.subject}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Status</span>
+                <Badge variant="outline" className={`text-[10px] h-5 px-1.5 ${STATUS_COLOR[selectedTicket.status] ?? ""}`}>
+                  {selectedTicket.status}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Priority</span>
+                <Badge className={`text-[10px] h-5 px-1.5 ${PRIORITY_COLOR[selectedTicket.priority] ?? ""}`}>
+                  {selectedTicket.priority}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Created</span>
+                <span>{selectedTicket.createdAt}</span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-muted-foreground">Description</span>
+                <p className="rounded-lg border bg-muted/30 p-3 leading-relaxed">{selectedTicket.message}</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* FAQ Section */}
       <div id="faq-section" className="max-w-3xl mx-auto w-full">
@@ -489,9 +561,9 @@ export default function HelpCenter() {
                   <p className="font-semibold text-sm">{step.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{step.desc}</p>
                 </div>
-                <a href={step.link} className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1 mt-1">
+                <Link href={step.link} className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1 mt-1">
                   {step.linkLabel} <ExternalLink size={10} />
-                </a>
+                </Link>
               </div>
             ))}
           </div>
@@ -670,14 +742,14 @@ export default function HelpCenter() {
               </div>
               <div className="space-y-1.5">
                 <Label>Email</Label>
-                <Input type="email" placeholder="you@codecore.edu" value={contactForm.email} onChange={e => setContactForm(f => ({ ...f, email: e.target.value }))} required />
+                <Input type="email" placeholder="you@cc.local" value={contactForm.email} onChange={e => setContactForm(f => ({ ...f, email: e.target.value }))} required />
               </div>
               <div className="space-y-1.5">
                 <Label>Message</Label>
                 <Textarea placeholder="How can we help you?" className="min-h-[100px] resize-none" value={contactForm.message} onChange={e => setContactForm(f => ({ ...f, message: e.target.value }))} required />
               </div>
               <div className="pt-2 space-y-2 text-sm text-muted-foreground border-t">
-                <div className="flex items-center gap-2"><Mail size={13} /> support@codecore.edu</div>
+                <div className="flex items-center gap-2"><Mail size={13} /> support@cc.local</div>
                 <div className="flex items-center gap-2"><Phone size={13} /> +91 9876543210</div>
                 <div className="flex items-center gap-2"><Clock size={13} /> Mon–Fri, 9 AM – 6 PM IST</div>
               </div>
