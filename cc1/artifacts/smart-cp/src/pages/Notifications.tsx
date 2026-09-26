@@ -1,16 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, Check, Clock, Search, Trash2, CheckCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useLocation } from "wouter";
 import { notifications as initialNotifications } from "@/data/mockData";
-import { getBoardMoveNotifications, type BoardMoveNotification } from "@/lib/boardAudit";
-import { markAllNotificationsRead, markNotificationRead } from "@/lib/api";
+import {
+  deleteBoardMoveNotification,
+  getBoardMoveNotifications,
+  markAllBoardMoveNotificationsRead,
+  markBoardMoveNotificationRead,
+  updateBoardMoveComment,
+  type BoardMoveNotification,
+} from "@/lib/boardAudit";
+import { APP_DATA_UPDATED_EVENT, deleteNotification, markAllNotificationsRead, markNotificationRead } from "@/lib/api";
 
 type BaseNotification = typeof initialNotifications[0];
 type Notification = BaseNotification | BoardMoveNotification;
 type FilterTab = "All" | "Unread" | "Approved" | "Pending" | "Rejected";
+type PendingDelete = {
+  notification: Notification;
+  expiresAt: number;
+};
 
 const FILTER_TABS: FilterTab[] = ["All", "Unread", "Approved", "Pending", "Rejected"];
 
@@ -38,14 +51,22 @@ function isBoardMoveNotification(notif: Notification): notif is BoardMoveNotific
   return "movement" in notif;
 }
 
-function NotificationItem({ notif, onRead, onDelete, onStatusUpdate, onOpenMoveDetails }: {
+function getTaskNotificationId(notif: Notification) {
+  if (isBoardMoveNotification(notif)) return "";
+  if (notif.taskId) return notif.taskId;
+  return notif.message.match(/\bTask ID\s+(\d+)\b/i)?.[1] ?? "";
+}
+
+function NotificationItem({ notif, onRead, onDelete, onStatusUpdate, onOpenMoveDetails, onOpenTask }: {
   notif: Notification;
   onRead: (id: string) => void;
   onDelete: (id: string) => void;
   onStatusUpdate: (id: string, status: "Approved" | "Rejected") => void;
   onOpenMoveDetails: (notif: BoardMoveNotification) => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   const status = getNotifStatus(notif);
+  const taskId = getTaskNotificationId(notif);
 
   return (
     <div
@@ -53,6 +74,7 @@ function NotificationItem({ notif, onRead, onDelete, onStatusUpdate, onOpenMoveD
       onClick={() => {
         onRead(notif.id);
         if (isBoardMoveNotification(notif)) onOpenMoveDetails(notif);
+        else if (taskId) onOpenTask(taskId);
       }}
     >
       {/* Unread dot */}
@@ -118,6 +140,7 @@ function NotificationItem({ notif, onRead, onDelete, onStatusUpdate, onOpenMoveD
 }
 
 export default function Notifications() {
+  const [, navigate] = useLocation();
   const [notifs, setNotifs] = useState<Notification[]>(() => [
     ...getBoardMoveNotifications(),
     ...initialNotifications,
@@ -125,32 +148,100 @@ export default function Notifications() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("All");
   const [search, setSearch] = useState("");
   const [selectedMove, setSelectedMove] = useState<BoardMoveNotification | null>(null);
+  const [moveComment, setMoveComment] = useState("");
+  const [pendingDeletes, setPendingDeletes] = useState<PendingDelete[]>([]);
+  const pendingDeleteIds = useRef<Set<string>>(new Set());
+  const deleteTimers = useRef<Map<string, number>>(new Map());
+  const mounted = useRef(true);
+
+  const syncNotifications = () => {
+    const hiddenIds = pendingDeleteIds.current;
+    setNotifs([
+      ...getBoardMoveNotifications(),
+      ...initialNotifications,
+    ].filter(notification => !hiddenIds.has(notification.id)));
+  };
 
   useEffect(() => {
-    const syncBoardNotifications = () => {
-      setNotifs(prev => [
-        ...getBoardMoveNotifications(),
-        ...prev.filter(n => !isBoardMoveNotification(n)),
-      ]);
+    mounted.current = true;
+    syncNotifications();
+    window.addEventListener("planyway-board-notifications-updated", syncNotifications);
+    window.addEventListener(APP_DATA_UPDATED_EVENT, syncNotifications);
+    return () => {
+      mounted.current = false;
+      window.removeEventListener("planyway-board-notifications-updated", syncNotifications);
+      window.removeEventListener(APP_DATA_UPDATED_EVENT, syncNotifications);
     };
-
-    syncBoardNotifications();
-    window.addEventListener("planyway-board-notifications-updated", syncBoardNotifications);
-    return () => window.removeEventListener("planyway-board-notifications-updated", syncBoardNotifications);
   }, []);
+
+  useEffect(() => {
+    setMoveComment(selectedMove?.movement.comment ?? "");
+  }, [selectedMove]);
 
   const markRead = (id: string) => {
     setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     const notification = notifs.find(n => n.id === id);
-    if (notification && !isBoardMoveNotification(notification)) {
+    if (notification && isBoardMoveNotification(notification)) {
+      markBoardMoveNotificationRead(id);
+    } else if (notification) {
       markNotificationRead(id).catch(error => console.error("Unable to persist notification read state.", error));
     }
   };
   const markAllRead = () => {
     setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+    markAllBoardMoveNotificationsRead();
     markAllNotificationsRead().catch(error => console.error("Unable to persist notification read state.", error));
   };
-  const deleteNotif = (id: string) => setNotifs(prev => prev.filter(n => n.id !== id));
+  const finalizeDelete = (notification: Notification) => {
+    deleteTimers.current.delete(notification.id);
+    pendingDeleteIds.current.delete(notification.id);
+    if (mounted.current) {
+      setPendingDeletes(prev => prev.filter(item => item.notification.id !== notification.id));
+    }
+
+    const remove = isBoardMoveNotification(notification)
+      ? Promise.resolve(deleteBoardMoveNotification(notification.id))
+      : deleteNotification(notification.id);
+
+    remove.catch(error => {
+      console.error("Unable to delete notification.", error);
+      if (!mounted.current) return;
+      setNotifs(prev => [notification, ...prev]);
+    });
+  };
+
+  const deleteNotif = (id: string) => {
+    const notification = notifs.find(n => n.id === id);
+    if (!notification || pendingDeleteIds.current.has(id)) return;
+
+    pendingDeleteIds.current.add(id);
+    setNotifs(prev => prev.filter(n => n.id !== id));
+    setPendingDeletes(prev => [
+      ...prev.filter(item => item.notification.id !== id),
+      { notification, expiresAt: Date.now() + 6000 },
+    ]);
+
+    const timer = window.setTimeout(() => finalizeDelete(notification), 6000);
+    deleteTimers.current.set(id, timer);
+  };
+
+  const undoDelete = (id: string) => {
+    const pending = pendingDeletes.find(item => item.notification.id === id);
+    if (!pending) return;
+
+    const timer = deleteTimers.current.get(id);
+    if (timer) window.clearTimeout(timer);
+    deleteTimers.current.delete(id);
+    pendingDeleteIds.current.delete(id);
+    setPendingDeletes(prev => prev.filter(item => item.notification.id !== id));
+    setNotifs(prev => [pending.notification, ...prev]);
+  };
+
+  const saveMoveComment = () => {
+    if (!selectedMove) return;
+    const updated = updateBoardMoveComment(selectedMove.movementId, moveComment.trim());
+    if (updated) setSelectedMove(updated);
+  };
   const updateStatus = (id: string, status: "Approved" | "Rejected") => {
     setNotifs(prev => prev.map(n => n.id === id ? {
       ...n,
@@ -254,6 +345,7 @@ export default function Notifications() {
                 onDelete={deleteNotif}
                 onStatusUpdate={updateStatus}
                 onOpenMoveDetails={setSelectedMove}
+                onOpenTask={taskId => navigate(`/tasks?taskId=${encodeURIComponent(taskId)}`)}
               />
             ))
           ) : (
@@ -274,6 +366,19 @@ export default function Notifications() {
           </div>
         )}
       </div>
+
+      {pendingDeletes.length > 0 && (
+        <div className="fixed bottom-5 right-5 z-50 space-y-2">
+          {pendingDeletes.map(({ notification }) => (
+            <div key={notification.id} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm shadow-lg">
+              <span className="font-medium">Notification removed</span>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => undoDelete(notification.id)}>
+                Undo
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Dialog open={Boolean(selectedMove)} onOpenChange={(open) => { if (!open) setSelectedMove(null); }}>
         <DialogContent className="sm:max-w-lg">
@@ -321,14 +426,20 @@ export default function Notifications() {
 
               <div>
                 <p className="text-xs font-semibold uppercase text-muted-foreground">Comments / Description</p>
-                <p className="mt-1 rounded-lg border bg-muted/30 p-3 text-muted-foreground">
-                  {selectedMove.movement.comment || "No comments added."}
-                </p>
+                <Textarea
+                  className="mt-1 min-h-[90px]"
+                  value={moveComment}
+                  onChange={event => setMoveComment(event.target.value)}
+                  placeholder="Add movement comment or description..."
+                />
               </div>
             </div>
           )}
 
           <DialogFooter>
+            <Button variant="outline" onClick={saveMoveComment} disabled={!selectedMove}>
+              Save Comment
+            </Button>
             <Button onClick={() => setSelectedMove(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search, Filter, GripVertical, Bug, RefreshCw, Ticket, ClipboardList,
   Zap, CheckCircle2, Clock, AlertTriangle, BarChart3, Users, Flame,
@@ -15,6 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { getAuthSession } from "@/lib/auth";
+import { apiJson } from "@/lib/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend,
@@ -38,6 +42,22 @@ interface Sprint {
   goal: string; capacity: number; velocity: number; tickets: Ticket[];
 }
 interface Doc { id: string; name: string; type: string; size: string; uploadedBy: string; date: string; category: string; }
+interface EmployeeOption {
+  id: string;
+  userId?: string;
+  name: string;
+  designation: string;
+  role?: string;
+  status?: string;
+}
+
+interface PendingSprintAssignment {
+  sprintId: string;
+  ticket: Ticket;
+  fromStatus: StoryStatus;
+  toStatus: StoryStatus;
+  employeeId: string;
+}
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const TICKET_CONFIG: Record<TicketType, { label: string; icon: React.ElementType; color: string; bg: string; border: string }> = {
@@ -152,14 +172,21 @@ function labelColor(l: string) { let h = 0; for (let i = 0; i < l.length; i++) h
 
 // ─── TICKET CARD ─────────────────────────────────────────────────────────────
 function TicketCard({ ticket, isDragging, onDragStart, onDragEnd }: {
-  ticket: Ticket; isDragging: boolean; onDragStart: (id: string) => void; onDragEnd: () => void;
+  ticket: Ticket;
+  isDragging: boolean;
+  onDragStart: (id: string, event: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
 }) {
   const p = PRIORITY_CONFIG[ticket.priority];
   const t = TICKET_CONFIG[ticket.type];
   const TypeIcon = t.icon;
   return (
+    <div
+      draggable
+      onDragStart={event => onDragStart(ticket.id, event)}
+      onDragEnd={onDragEnd}
+    >
     <motion.div layout initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: isDragging ? 0.4 : 1, scale: 1 }} exit={{ opacity: 0 }}
-      draggable onDragStart={() => onDragStart(ticket.id)} onDragEnd={onDragEnd}
       className={cn("bg-card border rounded-xl p-3 cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all select-none", isDragging && "ring-2 ring-primary/40")}
     >
       <div className="flex items-center justify-between mb-2">
@@ -192,6 +219,7 @@ function TicketCard({ ticket, isDragging, onDragStart, onDragEnd }: {
         </div>
       </div>
     </motion.div>
+    </div>
   );
 }
 
@@ -438,7 +466,10 @@ function BacklogTab({ sprint }: { sprint: Sprint }) {
 }
 
 // ─── BOARD TAB ────────────────────────────────────────────────────────────────
-function BoardTab({ sprint, onMove }: { sprint: Sprint; onMove: (id: string, col: StoryStatus) => void }) {
+function BoardTab({ sprint, onRequestMove }: {
+  sprint: Sprint;
+  onRequestMove: (ticketId: string, fromStatus: StoryStatus, toStatus: StoryStatus) => void;
+}) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<StoryStatus | null>(null);
   const [search, setSearch] = useState("");
@@ -449,6 +480,29 @@ function BoardTab({ sprint, onMove }: { sprint: Sprint; onMove: (id: string, col
     (search === "" || t.title.toLowerCase().includes(search.toLowerCase())) &&
     (pf === "all" || t.priority === pf)
   );
+  const startTicketDrag = (id: string, event: React.DragEvent<HTMLDivElement>) => {
+    setDraggedId(id);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", id);
+  };
+  const clearTicketDrag = () => {
+    setDraggedId(null);
+    setDragOverCol(null);
+  };
+  const handleColumnDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+      setDragOverCol(null);
+    }
+  };
+  const handleColumnDrop = (event: React.DragEvent<HTMLDivElement>, columnId: StoryStatus) => {
+    event.preventDefault();
+    const ticketId = draggedId ?? event.dataTransfer.getData("text/plain");
+    const ticket = sprint.tickets.find(item => item.id === ticketId);
+    clearTicketDrag();
+    if (!ticket || ticket.status === columnId) return;
+    onRequestMove(ticketId, ticket.status, columnId);
+  };
 
   return (
     <div className="space-y-3">
@@ -472,9 +526,13 @@ function BoardTab({ sprint, onMove }: { sprint: Sprint; onMove: (id: string, col
           const isDragOver = dragOverCol === col.id;
           return (
             <div key={col.id} className="flex-1 min-w-[180px] max-w-[240px] shrink-0"
-              onDragOver={e => { e.preventDefault(); setDragOverCol(col.id); }}
-              onDrop={() => { if (draggedId) { onMove(draggedId, col.id); setDraggedId(null); setDragOverCol(null); } }}
-              onDragLeave={() => setDragOverCol(null)}
+              onDragOver={event => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDragOverCol(col.id);
+              }}
+              onDrop={event => handleColumnDrop(event, col.id)}
+              onDragLeave={handleColumnDragLeave}
             >
               <div className={cn("rounded-xl border-t-2 overflow-hidden transition-all", col.top, isDragOver ? "ring-2 ring-primary/30 bg-primary/5" : "")}>
                 {/* Column header */}
@@ -487,7 +545,7 @@ function BoardTab({ sprint, onMove }: { sprint: Sprint; onMove: (id: string, col
                   <AnimatePresence>
                     {cards.map(t => (
                       <TicketCard key={t.id} ticket={t} isDragging={draggedId === t.id}
-                        onDragStart={id => setDraggedId(id)} onDragEnd={() => setDraggedId(null)} />
+                        onDragStart={startTicketDrag} onDragEnd={clearTicketDrag} />
                     ))}
                   </AnimatePresence>
                   {cards.length === 0 && (
@@ -788,18 +846,121 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function PlanWay() {
+  const isIntern = getAuthSession()?.user.role === "INTERN";
   const [activeTab, setActiveTab] = useState<Tab>("summary");
   const [selectedId, setSelectedId] = useState("S01");
   const [sprintsData, setSprintsData] = useState<Sprint[]>(SPRINTS);
+  const [showProjectDialog, setShowProjectDialog] = useState(false);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [projectForm, setProjectForm] = useState({ name: "", description: "", category: "Web Application", status: "Active", startDate: "", endDate: "", assignedEmployeeId: "" });
+  const [projectSubmitting, setProjectSubmitting] = useState(false);
+  const [projectError, setProjectError] = useState("");
+  const [pendingSprintAssignment, setPendingSprintAssignment] = useState<PendingSprintAssignment | null>(null);
+  const [assignmentEmployees, setAssignmentEmployees] = useState<EmployeeOption[]>([]);
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+  const [assignmentError, setAssignmentError] = useState("");
+
+  useEffect(() => {
+    if (!showProjectDialog) return;
+    apiJson<{ employees: EmployeeOption[] }>("/employees")
+      .then(payload => setEmployees(payload.employees))
+      .catch(error => setProjectError(error instanceof Error ? error.message : "Unable to load employees."));
+  }, [showProjectDialog]);
+
+  useEffect(() => {
+    if (!pendingSprintAssignment) return;
+
+    let cancelled = false;
+    setAssignmentLoading(true);
+    setAssignmentError("");
+    apiJson<{ employees: EmployeeOption[] }>("/employees")
+      .then(payload => {
+        if (cancelled) return;
+        setAssignmentEmployees(payload.employees.filter(employee =>
+          employee.status !== "Inactive" && employee.role?.toUpperCase() === "EMPLOYEE"
+        ));
+      })
+      .catch(error => {
+        if (!cancelled) {
+          setAssignmentError(error instanceof Error ? error.message : "Unable to load employees.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAssignmentLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingSprintAssignment !== null]);
+
+  const createProject = async () => {
+    if (!projectForm.name.trim() || !projectForm.assignedEmployeeId) {
+      setProjectError("Project name and employee assignment are required.");
+      return;
+    }
+
+    setProjectSubmitting(true);
+    setProjectError("");
+    try {
+      await apiJson("/projects", {
+        method: "POST",
+        body: JSON.stringify({
+          ...projectForm,
+          name: projectForm.name.trim(),
+          description: projectForm.description.trim(),
+        }),
+      });
+      setProjectForm({ name: "", description: "", category: "Web Application", status: "Active", startDate: "", endDate: "", assignedEmployeeId: "" });
+      setShowProjectDialog(false);
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "Unable to create project.");
+    } finally {
+      setProjectSubmitting(false);
+    }
+  };
 
   const sprint = sprintsData.find(s => s.id === selectedId) ?? sprintsData[0];
 
-  const handleMove = (ticketId: string, col: StoryStatus) => {
+  const requestSprintAssignment = (ticketId: string, fromStatus: StoryStatus, toStatus: StoryStatus) => {
+    const ticket = sprint.tickets.find(item => item.id === ticketId);
+    if (!ticket || ticket.status !== fromStatus) return;
+    setAssignmentError("");
+    setPendingSprintAssignment({
+      sprintId: sprint.id,
+      ticket,
+      fromStatus,
+      toStatus,
+      employeeId: "",
+    });
+  };
+
+  const confirmSprintAssignment = () => {
+    if (!pendingSprintAssignment?.employeeId) return;
+    const employee = assignmentEmployees.find(item =>
+      (item.userId ?? item.id) === pendingSprintAssignment.employeeId
+    );
+    if (!employee) {
+      setAssignmentError("Select an active employee to assign this work.");
+      return;
+    }
+
     setSprintsData(prev => prev.map(sp =>
-      sp.id === selectedId
-        ? { ...sp, tickets: sp.tickets.map(t => t.id === ticketId ? { ...t, status: col, progress: col === "Done Story" ? 100 : t.progress } : t) }
+      sp.id === pendingSprintAssignment.sprintId
+        ? {
+            ...sp,
+            tickets: sp.tickets.map(ticket => ticket.id === pendingSprintAssignment.ticket.id
+              ? {
+                  ...ticket,
+                  status: pendingSprintAssignment.toStatus,
+                  assignee: employee.name,
+                  progress: pendingSprintAssignment.toStatus === "Done Story" ? 100 : ticket.progress,
+                }
+              : ticket),
+          }
         : sp
     ));
+    setPendingSprintAssignment(null);
   };
 
   return (
@@ -823,15 +984,108 @@ export default function PlanWay() {
               {sprintsData.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.status})</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button
-            size="sm"
-            className="gap-1.5 h-8 text-xs"
-            onClick={() => window.location.assign("/tasks?createTicket=1")}
-          >
-            <Plus size={13} /> New Ticket
-          </Button>
+          {!isIntern && (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => { setProjectError(""); setShowProjectDialog(true); }}>
+                <Plus size={13} /> New Project
+              </Button>
+              <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => window.location.assign("/tasks?createTicket=1")}>
+                <Plus size={13} /> New Ticket
+              </Button>
+            </div>
+          )}
         </div>
       </div>
+
+      <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Create and Assign Project</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Project name</Label>
+              <Input value={projectForm.name} onChange={e => setProjectForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Website Development" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Input value={projectForm.description} onChange={e => setProjectForm(prev => ({ ...prev, description: e.target.value }))} placeholder="Project description" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Assign employee</Label>
+              <Select value={projectForm.assignedEmployeeId} onValueChange={value => setProjectForm(prev => ({ ...prev, assignedEmployeeId: value }))}>
+                <SelectTrigger><SelectValue placeholder="Select an employee" /></SelectTrigger>
+                <SelectContent>
+                  {employees.map(employee => <SelectItem key={employee.id} value={employee.id}>{employee.name} - {employee.designation}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label>Start date</Label><Input type="date" value={projectForm.startDate} onChange={e => setProjectForm(prev => ({ ...prev, startDate: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>End date</Label><Input type="date" value={projectForm.endDate} onChange={e => setProjectForm(prev => ({ ...prev, endDate: e.target.value }))} /></div>
+            </div>
+            {projectError && <p className="text-sm text-destructive">{projectError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowProjectDialog(false)}>Cancel</Button>
+            <Button onClick={createProject} disabled={projectSubmitting}>{projectSubmitting ? "Creating..." : "Create Project"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pendingSprintAssignment !== null} onOpenChange={open => !open && setPendingSprintAssignment(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Assign Work</DialogTitle></DialogHeader>
+          {pendingSprintAssignment && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase text-muted-foreground">Task Name</p>
+                <p className="text-sm font-semibold leading-snug">{pendingSprintAssignment.ticket.title}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg border p-3">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground">From Status</p>
+                  <p className="font-medium">{pendingSprintAssignment.fromStatus}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground">To Status</p>
+                  <p className="font-medium">{pendingSprintAssignment.toStatus}</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Assign To <span className="text-destructive">*</span></Label>
+                <Select
+                  value={pendingSprintAssignment.employeeId}
+                  onValueChange={employeeId => setPendingSprintAssignment(current =>
+                    current ? { ...current, employeeId } : current
+                  )}
+                  disabled={assignmentLoading || Boolean(assignmentError)}
+                >
+                  <SelectTrigger><SelectValue placeholder={assignmentLoading ? "Loading employees..." : "Select Employee"} /></SelectTrigger>
+                  <SelectContent>
+                    {assignmentEmployees.map(employee => (
+                      <SelectItem key={employee.id} value={employee.userId ?? employee.id}>
+                        {employee.name} - {employee.designation}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {assignmentError && <p className="text-sm text-destructive">{assignmentError}</p>}
+              {!assignmentLoading && !assignmentError && assignmentEmployees.length === 0 && (
+                <p className="text-sm text-muted-foreground">No active employees are available to assign.</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingSprintAssignment(null)}>Cancel</Button>
+            <Button
+              onClick={confirmSprintAssignment}
+              disabled={assignmentLoading || Boolean(assignmentError) || !pendingSprintAssignment?.employeeId}
+            >
+              Assign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Tab bar */}
       <div className="flex border-b mb-4 overflow-x-auto">
@@ -855,7 +1109,7 @@ export default function PlanWay() {
           <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
             {activeTab === "summary"   && <SummaryTab sprint={sprint} />}
             {activeTab === "backlog"   && <BacklogTab sprint={sprint} />}
-            {activeTab === "board"     && <BoardTab sprint={sprint} onMove={handleMove} />}
+            {activeTab === "board"     && <BoardTab sprint={sprint} onRequestMove={requestSprintAssignment} />}
             {activeTab === "timeline"  && <TimelineTab sprints={sprintsData} />}
             {activeTab === "reports"   && <ReportsTab sprints={sprintsData} sprint={sprint} />}
             {activeTab === "documents" && <DocumentsTab />}

@@ -19,11 +19,13 @@ export interface Student {
   address: string;
   degree: string;
   year: string;
+  salary?: number;
   skills: string[];
 }
 
 export interface Staff {
   id: string;
+  userId?: string;
   name: string;
   designation: string;
   role: string;
@@ -33,6 +35,7 @@ export interface Staff {
   phone: string;
   status: string;
   bio: string;
+  salary?: number;
 }
 
 export interface LeaveRequest {
@@ -64,6 +67,10 @@ export interface Task {
   title: string;
   description: string;
   assignedTo: string;
+  assignedToUserId?: string;
+  createdByUserId?: string;
+  projectId?: string;
+  projectName?: string;
   priority: string;
   dueDate: string;
   status: string;
@@ -99,6 +106,7 @@ export interface NotificationItem {
   message: string;
   time: string;
   read: boolean;
+  taskId?: string;
 }
 
 export type ProjectStatus = "Active" | "Planning" | "On Hold" | "Completed" | "Cancelled" | string;
@@ -198,4 +206,14 @@ export function replaceAppData(data: Partial<AppData>) {
   projectDocuments = replaceArray(data.projectDocuments);
   events = replaceArray(data.events);
   appDataLoaded = true;
+}
+
+export function markCachedNotificationRead(id: string) {
+  notifications = notifications.map(notification =>
+    notification.id === id ? { ...notification, read: true } : notification
+  );
+}
+
+export function markAllCachedNotificationsRead() {
+  notifications = notifications.map(notification => ({ ...notification, read: true }));
 }

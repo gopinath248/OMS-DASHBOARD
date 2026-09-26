@@ -27,6 +27,10 @@ export default function ApplyLeave() {
     type: "",
     startDate: "",
     endDate: "",
+    startTime: "09:00",
+    endTime: "18:00",
+    halfDay: false,
+    halfDayPeriod: "Morning",
     reason: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -38,9 +42,25 @@ export default function ApplyLeave() {
     if (!form.endDate) e.endDate = "End date is required.";
     if (form.startDate && form.endDate && form.endDate < form.startDate)
       e.endDate = "End date must be after start date.";
+    if (form.startDate === form.endDate) {
+      const startMinutes = new Date(`2000-01-01T${form.startTime || "09:00"}:00`).getTime();
+      const endMinutes = new Date(`2000-01-01T${form.endTime || "18:00"}:00`).getTime();
+      if (Number.isFinite(startMinutes) && Number.isFinite(endMinutes) && endMinutes < startMinutes) {
+        e.endTime = "End time must be after start time on the same day.";
+      }
+    }
     if (!form.reason.trim()) e.reason = "Please provide a reason.";
     else if (form.reason.trim().length < 15) e.reason = "Reason must be at least 15 characters.";
     return e;
+  };
+
+  const getLeaveDuration = () => {
+    if (!form.startDate || !form.endDate) return 0;
+    if (form.halfDay) return 0.5;
+    const start = new Date(`${form.startDate}T${form.startTime || "09:00"}:00`);
+    const end = new Date(`${form.endDate}T${form.endTime || "18:00"}:00`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+    return Number(Math.max(0.5, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)).toFixed(2));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,12 +74,19 @@ export default function ApplyLeave() {
     setIsSubmitting(true);
 
     try {
+      const duration = getLeaveDuration();
       const payload = await apiJson<{ leaveRequest: { id: string; status: string } }>("/leave-requests", {
         method: "POST",
         body: JSON.stringify({
           type: form.type,
           startDate: form.startDate,
           endDate: form.endDate,
+          startTime: form.startTime,
+          endTime: form.endTime,
+          halfDay: form.halfDay,
+          halfDayPeriod: form.halfDayPeriod,
+          duration,
+          leaveDays: duration,
           reason: form.reason.trim(),
         }),
       });
@@ -102,7 +129,7 @@ export default function ApplyLeave() {
             )}
             <p className="text-sm text-green-600">Your manager will review your request shortly. You'll be notified once a decision is made.</p>
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={() => { setSubmitted(false); setForm({ type: "", startDate: "", endDate: "", reason: "" }); }}>
+              <Button variant="outline" onClick={() => { setSubmitted(false); setForm({ type: "", startDate: "", endDate: "", startTime: "09:00", endTime: "18:00", halfDay: false, halfDayPeriod: "Morning", reason: "" }); }}>
                 Submit Another
               </Button>
               <Button onClick={() => setLocation("/intern/dashboard")}>
@@ -191,10 +218,54 @@ export default function ApplyLeave() {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="startTime">Start Time</Label>
+                <Input type="time" id="startTime" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="endTime">End Time</Label>
+                <Input type="time" id="endTime" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} className={errors.endTime ? "border-destructive" : ""} />
+                {errors.endTime && <p className="text-xs text-destructive">{errors.endTime}</p>}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Leave Portion</Label>
+              <div className="flex flex-wrap gap-3">
+                {[
+                  { label: "0.5 Day", value: 0.5 },
+                  { label: "1 Day", value: 1 },
+                ].map((option) => (
+                  <label key={option.label} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="radio"
+                      name="halfDaySelection"
+                      checked={form.halfDay ? (option.value === 0.5 ? form.halfDayPeriod !== "Full Day" : form.halfDayPeriod === "Full Day") : false}
+                      onChange={() => {
+                        setForm(f => ({ ...f, halfDay: true, halfDayPeriod: option.value === 0.5 ? "Morning" : "Full Day" }));
+                        setErrors(ev => ({ ...ev, endTime: "" }));
+                      }}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="halfDaySelection"
+                    checked={!form.halfDay}
+                    onChange={() => setForm(f => ({ ...f, halfDay: false, halfDayPeriod: "" }))}
+                  />
+                  Full Date Range
+                </label>
+              </div>
+            </div>
+
             {form.startDate && form.endDate && form.endDate >= form.startDate && (
               <div className="bg-muted/50 border rounded-lg px-4 py-3 text-sm text-muted-foreground">
                 Duration: <span className="font-semibold text-foreground">
-                  {Math.ceil((new Date(form.endDate).getTime() - new Date(form.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} day(s)
+                  {form.halfDay ? "0.5 Day" : `${getLeaveDuration()} day(s)`}
                 </span>
               </div>
             )}

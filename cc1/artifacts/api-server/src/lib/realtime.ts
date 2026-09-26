@@ -7,6 +7,8 @@ type SseClient = {
 };
 
 const clients = new Map<string, SseClient>();
+const offlineTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const authenticatedOnlineUserIds = new Set<string>();
 
 function sendEvent(client: SseClient, event: string, data: unknown) {
   client.res.write(`event: ${event}\n`);
@@ -23,7 +25,14 @@ export function addSseClient(userId: string, res: Response, onClose: (handler: (
 
   const id = `${userId}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
   const client: SseClient = { id, userId, res };
+  const offlineTimer = offlineTimers.get(userId);
+  if (offlineTimer) {
+    clearTimeout(offlineTimer);
+    offlineTimers.delete(userId);
+  }
+
   clients.set(id, client);
+  authenticatedOnlineUserIds.add(userId);
   emitToClient(client, "connected", { userId, connectedAt: new Date().toISOString() });
 
   emitToAll("presence", { userId, online: true });
@@ -36,13 +45,48 @@ export function addSseClient(userId: string, res: Response, onClose: (handler: (
     clearInterval(heartbeat);
     clients.delete(id);
     if (![...clients.values()].some((connectedClient) => connectedClient.userId === userId)) {
-      emitToAll("presence", { userId, online: false });
+      const timer = setTimeout(() => {
+        offlineTimers.delete(userId);
+        if (
+          !authenticatedOnlineUserIds.has(userId) &&
+          ![...clients.values()].some((connectedClient) => connectedClient.userId === userId)
+        ) {
+          emitToAll("presence", { userId, online: false });
+        }
+      }, 3000);
+      offlineTimers.set(userId, timer);
     }
   });
 }
 
 export function getOnlineUserIds() {
-  return new Set([...clients.values()].map((client) => client.userId));
+  return new Set([
+    ...authenticatedOnlineUserIds,
+    ...[...clients.values()].map((client) => client.userId),
+  ]);
+}
+
+export function markUserOnline(userId: string) {
+  const offlineTimer = offlineTimers.get(userId);
+  if (offlineTimer) {
+    clearTimeout(offlineTimer);
+    offlineTimers.delete(userId);
+  }
+  authenticatedOnlineUserIds.add(userId);
+  emitToAll("presence", { userId, online: true });
+}
+
+export function markUserOffline(userId: string) {
+  authenticatedOnlineUserIds.delete(userId);
+  for (const [clientId, client] of clients.entries()) {
+    if (client.userId === userId) clients.delete(clientId);
+  }
+  const offlineTimer = offlineTimers.get(userId);
+  if (offlineTimer) {
+    clearTimeout(offlineTimer);
+    offlineTimers.delete(userId);
+  }
+  emitToAll("presence", { userId, online: false });
 }
 
 export function emitToClient(client: SseClient, event: string, data: unknown) {

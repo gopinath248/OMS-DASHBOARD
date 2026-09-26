@@ -37,7 +37,7 @@ const STATUSES = ["Active", "On Leave"] as const;
 
 const EMPTY_FORM = {
   name: "", email: "", phone: "", designation: "",
-  role: "", bio: "", temporaryPassword: "", status: "Active" as "Active" | "On Leave",
+  role: "", bio: "", salary: "", temporaryPassword: "", status: "Active" as "Active" | "On Leave",
 };
 
 function getEmpUserId(name: string, id: string): string {
@@ -354,9 +354,10 @@ export default function StaffManagement() {
     if (!form.name.trim()) e.name = "Name is required.";
     if (!form.designation) e.designation = "Designation is required.";
     if (!form.role) e.role = "Role is required.";
+    if (form.salary === "" || Number.isNaN(Number(form.salary)) || Number(form.salary) < 0) e.salary = "Salary is required and must be non-negative.";
     if (!form.temporaryPassword.trim()) e.temporaryPassword = "Temporary password is required.";
     if (form.temporaryPassword.trim() && form.temporaryPassword.trim().length < 8) e.temporaryPassword = "Use at least 8 characters.";
-    if (form.phone && !/^\d{10}$/.test(form.phone)) e.phone = "Enter a 10-digit phone number.";
+    if (form.phone && !/^\d{10}$/.test(form.phone)) e.phone = "Please enter a valid 10-digit phone number.";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -379,7 +380,7 @@ export default function StaffManagement() {
           "Content-Type": "application/json; charset=utf-8",
           Authorization: `Bearer ${session.token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, salary: Number(form.salary) }),
       });
       const payload = await response.json().catch(() => null) as {
         employee?: Staff & { userId?: string };
@@ -905,6 +906,11 @@ export default function StaffManagement() {
               <Label>Phone</Label>
               <Input placeholder="10 digits" value={form.phone} onChange={f("phone")} />
               {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Salary <span className="text-destructive">*</span></Label>
+              <Input type="number" min="0" step="1000" placeholder="e.g. 80000" value={form.salary} onChange={f("salary")} />
+              {errors.salary && <p className="text-xs text-destructive">{errors.salary}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Temporary Password <span className="text-destructive">*</span></Label>

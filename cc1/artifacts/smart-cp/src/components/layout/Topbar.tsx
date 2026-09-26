@@ -32,13 +32,14 @@ import {
   type AuthSession,
   type NavigationRole,
 } from "@/lib/auth";
-import { markAllNotificationsRead } from "@/lib/api";
+import { APP_DATA_UPDATED_EVENT, markAllNotificationsRead, markNotificationRead } from "@/lib/api";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   System: <AlertTriangle size={14} className="text-blue-500" />,
   Leave: <CalendarDays size={14} className="text-orange-500" />,
   Performance: <TrendingUp size={14} className="text-green-500" />,
   Tasks: <ClipboardCheck size={14} className="text-purple-500" />,
+  Task: <ClipboardCheck size={14} className="text-purple-500" />,
   Announcements: <Megaphone size={14} className="text-pink-500" />,
 };
 
@@ -273,6 +274,12 @@ export function Topbar() {
   }, [allNotifications]);
 
   useEffect(() => {
+    const syncNotifications = () => setNotifications([...allNotifications]);
+    window.addEventListener(APP_DATA_UPDATED_EVENT, syncNotifications);
+    return () => window.removeEventListener(APP_DATA_UPDATED_EVENT, syncNotifications);
+  }, []);
+
+  useEffect(() => {
     const refreshSession = () => setSession(getAuthSession());
     window.addEventListener(AUTH_SESSION_CHANGED_EVENT, refreshSession);
     window.addEventListener("storage", refreshSession);
@@ -294,6 +301,15 @@ export function Topbar() {
   const markAllRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     markAllNotificationsRead().catch(error => console.error("Unable to persist notification read state.", error));
+  };
+  const notificationPath = (notification: typeof allNotifications[number]) => {
+    const taskId = notification.taskId ?? notification.message.match(/\bTask ID\s+(\d+)\b/i)?.[1];
+    return taskId ? `/tasks?taskId=${encodeURIComponent(taskId)}` : "/notifications";
+  };
+  const openNotification = (notification: typeof allNotifications[number]) => {
+    setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, read: true } : n));
+    markNotificationRead(notification.id).catch(error => console.error("Unable to persist notification read state.", error));
+    navigate(notificationPath(notification));
   };
   const runSearch = (path?: string) => {
     const targetPath = path ?? searchResults[0]?.path;
@@ -404,7 +420,7 @@ export function Topbar() {
               <DropdownMenuItem
                 key={notif.id}
                 className={`flex items-start gap-3 py-3 px-3 cursor-pointer ${!notif.read ? "bg-primary/5" : ""}`}
-                onClick={() => navigate("/notifications")}
+                onClick={() => openNotification(notif)}
               >
                 <div className="mt-0.5 shrink-0">
                   {ICON_MAP[notif.category] ?? <Bell size={14} className="text-muted-foreground" />}

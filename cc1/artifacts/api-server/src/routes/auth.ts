@@ -9,6 +9,7 @@ import multer from "multer";
 import { LoginBody } from "@workspace/api-zod";
 import { db, usersTable, type User, type UserRole } from "@workspace/db";
 import { requireAuth, signAuthToken } from "../middlewares/auth";
+import { markUserOffline, markUserOnline } from "../lib/realtime";
 
 const router: IRouter = Router();
 const workspaceRoot = process.cwd().endsWith(path.join("artifacts", "api-server"))
@@ -200,11 +201,17 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     fullName: user.fullName,
     role,
   });
+  markUserOnline(user.userId);
 
   res.json({
     token,
     user: formatUser({ ...user, lastLogin }, role),
   });
+});
+
+router.post("/auth/logout", requireAuth, async (req, res): Promise<void> => {
+  markUserOffline(req.authUser!.userId);
+  res.status(204).send();
 });
 
 router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {

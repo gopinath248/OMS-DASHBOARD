@@ -87,7 +87,13 @@ async function unreadSummary(userId: string) {
     LEFT JOIN chat_reads r ON r.conversation_id = c.id AND r.user_id = mine.user_id
     WHERE mine.user_id = $1
       AND msg.sender_id IS DISTINCT FROM $1
-      AND msg.created_at > COALESCE(r.last_read_at, mine.last_read_at, mine.joined_at, '-infinity'::timestamptz)
+      AND (
+        (r.last_read_message_id IS NOT NULL AND msg.id > r.last_read_message_id)
+        OR (
+          r.last_read_message_id IS NULL
+          AND msg.created_at > COALESCE(r.last_read_at, mine.last_read_at, mine.joined_at, '-infinity'::timestamptz)
+        )
+      )
   `, [userId]);
 
   return { totalUnread: asNumber(result.rows[0]?.total_unread) };
@@ -205,7 +211,13 @@ router.get("/chat/bootstrap", requireAuth, async (req, res): Promise<void> => {
       LEFT JOIN chat_messages unread_msg ON unread_msg.conversation_id = c.id
         AND unread_msg.deleted_at IS NULL
         AND unread_msg.sender_id IS DISTINCT FROM $1
-        AND unread_msg.created_at > COALESCE(r.last_read_at, mine.last_read_at, mine.joined_at, '-infinity'::timestamptz)
+        AND (
+          (r.last_read_message_id IS NOT NULL AND unread_msg.id > r.last_read_message_id)
+          OR (
+            r.last_read_message_id IS NULL
+            AND unread_msg.created_at > COALESCE(r.last_read_at, mine.last_read_at, mine.joined_at, '-infinity'::timestamptz)
+          )
+        )
       WHERE c.kind = 'channel'
       GROUP BY c.id, latest.body
       ORDER BY c.created_at, c.id
@@ -229,7 +241,13 @@ router.get("/chat/bootstrap", requireAuth, async (req, res): Promise<void> => {
       LEFT JOIN chat_messages unread_msg ON unread_msg.conversation_id = c.id
         AND unread_msg.deleted_at IS NULL
         AND unread_msg.sender_id IS DISTINCT FROM $1
-        AND unread_msg.created_at > COALESCE(r.last_read_at, mine.last_read_at, mine.joined_at, '-infinity'::timestamptz)
+        AND (
+          (r.last_read_message_id IS NOT NULL AND unread_msg.id > r.last_read_message_id)
+          OR (
+            r.last_read_message_id IS NULL
+            AND unread_msg.created_at > COALESCE(r.last_read_at, mine.last_read_at, mine.joined_at, '-infinity'::timestamptz)
+          )
+        )
       WHERE c.kind = 'direct'
       GROUP BY c.id, latest.body
       ORDER BY max(msg.created_at) DESC NULLS LAST, c.updated_at DESC
@@ -490,13 +508,14 @@ router.post("/chat/messages/:messageId/reactions", requireAuth, async (req, res)
     return;
   }
 
-  const existing = await pool.query(
-    "SELECT id FROM chat_message_reactions WHERE message_id = $1 AND user_id = $2 AND reaction = $3",
-    [messageId, req.authUser!.userId, reaction],
+  const existing = await pool.query<{ reaction: string }>(
+    "SELECT reaction FROM chat_message_reactions WHERE message_id = $1 AND user_id = $2 LIMIT 1",
+    [messageId, req.authUser!.userId],
   );
-  if (existing.rowCount) {
-    await pool.query("DELETE FROM chat_message_reactions WHERE id = $1", [existing.rows[0].id]);
+  if (existing.rows[0]?.reaction === reaction) {
+    await pool.query("DELETE FROM chat_message_reactions WHERE message_id = $1 AND user_id = $2", [messageId, req.authUser!.userId]);
   } else {
+    await pool.query("DELETE FROM chat_message_reactions WHERE message_id = $1 AND user_id = $2", [messageId, req.authUser!.userId]);
     await pool.query(`
       INSERT INTO chat_message_reactions (message_id, user_id, reaction)
       VALUES ($1, $2, $3)

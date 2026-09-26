@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { requireAuth, requireRole } from "../middlewares/auth";
+import { emitToUser } from "../lib/realtime";
 
 const router: IRouter = Router();
 
@@ -208,8 +209,9 @@ async function readLeaveRows(employee: SalaryEmployee, range: ReturnType<typeof 
   const leaveRows: DbRow[] = [];
 
   const canonical = await pool.query<DbRow>(`
-    SELECT lr.id::text AS id, lr.leave_type, lr.start_date, lr.end_date, lr.status,
-           NULL::double precision AS duration, NULL::text AS day_portion, 'leave_requests' AS source
+    SELECT lr.id::text AS id, lr.leave_type, lr.start_date, lr.end_date, lr.start_time, lr.end_time,
+           lr.status, lr.duration, lr.leave_days, lr.half_day, lr.half_day_period,
+           lr.duration AS day_portion, 'leave_requests' AS source
     FROM leave_requests lr
     JOIN users u ON u.user_id = lr.user_id
     WHERE (lr.user_id = $1 OR lower(u.full_name) = lower($2))
@@ -273,23 +275,14 @@ async function calculateSalary(employee: SalaryEmployee, month: string) {
     ).map(dateKey).filter((date) => workingDateKeys.has(date));
     if (!dates.length) continue;
 
-    const duration = asNumber(row.duration, dates.length);
-    const portion = asString(row.day_portion).toLowerCase();
-    const baseFraction = dates.length === 1 && (duration === 0.5 || portion.includes("half")) ? 0.5 : 1;
-    const distributedFraction = duration > 0 && duration < dates.length ? duration / dates.length : baseFraction;
+    const leaveDays = asNumber(row.leave_days, asNumber(row.duration, dates.length));
+    const appliedDays = Math.max(0, Math.min(leaveDays, dates.length));
+    if (appliedDays <= 0) continue;
 
-    for (const date of dates) {
-      const alreadyUsed = usedByDate.get(date) ?? 0;
-      const available = Math.max(1 - alreadyUsed, 0);
-      const applied = Math.min(distributedFraction, available);
-      if (applied <= 0) continue;
-
-      usedByDate.set(date, alreadyUsed + applied);
-      const existing = leaveByType.get(leaveType) ?? { paid: isPaid, days: 0 };
-      existing.days = money(existing.days + applied);
-      existing.paid = isPaid;
-      leaveByType.set(leaveType, existing);
-    }
+    const existing = leaveByType.get(leaveType) ?? { paid: isPaid, days: 0 };
+    existing.days = money(existing.days + appliedDays);
+    existing.paid = isPaid;
+    leaveByType.set(leaveType, existing);
   }
 
   const leaveSummary = [...leaveByType.entries()]
@@ -420,6 +413,13 @@ router.get("/salary/calculation/:employeeId", requireAuth, requireRole([...ADMIN
   }
 });
 
+function formatCurrency(value: number) {
+  const safe = Number.isFinite(value) ? value : 0;
+  return Number.isInteger(safe)
+    ? safe.toLocaleString("en-IN")
+    : safe.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 router.post("/salary/assign", requireAuth, requireRole([...ADMIN_ONLY]), async (req, res): Promise<void> => {
   const employeeId = asString(req.body?.employeeId);
   const month = asString(req.body?.month);
@@ -477,6 +477,59 @@ router.post("/salary/assign", requireAuth, requireRole([...ADMIN_ONLY]), async (
       JSON.stringify(calculation),
       req.authUser!.userId,
     ]);
+
+    const assignment = saved.rows[0];
+    const targetUserId = employee.userId;
+    if (targetUserId && targetUserId !== req.authUser!.userId) {
+      const conversationKey = [req.authUser!.userId, targetUserId].sort((a, b) => a.localeCompare(b)).join(":");
+      const conversationId = `direct:${conversationKey}`;
+      const clientMessageId = `salary-assignment:${assignment.id}`;
+      const salaryMessage = `Your salary will be ₹${formatCurrency(calculation.salary.netSalary)} credited. Check this in your bank.`;
+
+      await pool.query<DbRow>(`
+        INSERT INTO chat_conversations (id, kind, title, direct_key, created_by)
+        VALUES ($1, 'direct', $2, $3, $4)
+        ON CONFLICT (direct_key) DO UPDATE SET updated_at = NOW()
+        RETURNING id
+      `, [conversationId, employee.name, conversationKey, req.authUser!.userId]);
+
+      await pool.query<DbRow>(`
+        INSERT INTO chat_conversation_members (conversation_id, user_id, member_role)
+        VALUES ($1, $2, 'member'), ($1, $3, 'member')
+        ON CONFLICT (conversation_id, user_id) DO NOTHING
+      `, [conversationId, req.authUser!.userId, targetUserId]);
+
+      const messageResult = await pool.query<DbRow>(`
+        INSERT INTO chat_messages (
+          conversation_id, sender_id, body, client_message_id, message_type
+        )
+        VALUES ($1, $2, $3, $4, 'text')
+        ON CONFLICT (sender_id, client_message_id) WHERE client_message_id IS NOT NULL
+        DO UPDATE SET updated_at = chat_messages.updated_at
+        RETURNING id, conversation_id, sender_id, body, created_at
+      `, [conversationId, req.authUser!.userId, salaryMessage, clientMessageId]);
+
+      if (messageResult.rows[0]) {
+        const message = messageResult.rows[0];
+        emitToUser(targetUserId, "message", {
+          id: String(message.id),
+          conversationId: asString(message.conversation_id),
+          senderId: asString(message.sender_id),
+          user: req.authUser!.fullName || "Admin User",
+          role: "Admin",
+          message: asString(message.body),
+          time: new Date(asString(message.created_at)).toLocaleString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+            timeZone: "Asia/Kolkata",
+          }),
+          createdAt: asString(message.created_at),
+        });
+      }
+    }
 
     res.status(calculation.assignment.exists ? 200 : 201).json({ assignment: saved.rows[0], calculation });
   } catch (error) {

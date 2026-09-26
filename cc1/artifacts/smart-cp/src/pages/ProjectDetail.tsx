@@ -219,7 +219,14 @@ export default function ProjectDetail() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const project = projects.find(p => p.id === id);
+  const employeeRecord = staff.find(employee => employee.userId === session?.user.userId);
+  const internRecord = students.find(student => student.userId === session?.user.userId || student.id === session?.user.userId);
+  const accessibleProjects = role === "employee"
+    ? projects.filter(item => employeeRecord && item.assignedStaff.includes(employeeRecord.id))
+    : role === "intern"
+      ? projects.filter(item => internRecord && item.assignedInterns.includes(internRecord.id))
+      : projects;
+  const project = accessibleProjects.find(p => p.id === id);
   const [docs, setDocs] = useState<ProjectDocument[]>(
     projectDocuments.filter(d => d.projectId === id)
   );

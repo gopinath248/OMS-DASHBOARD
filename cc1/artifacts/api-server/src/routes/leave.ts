@@ -37,12 +37,51 @@ function normalizeStatus(value: unknown) {
   return "";
 }
 
-function durationDays(startDate: string, endDate: string, halfDay: boolean) {
+function parseTimeMinutes(value: unknown) {
+  const raw = asString(value, "09:00").trim();
+  if (!raw) return 9 * 60;
+  const match = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?$/i);
+  if (!match) return 9 * 60;
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = (match[3] ?? "").toLowerCase();
+  if (meridiem === "pm" && hours !== 12) hours += 12;
+  if (meridiem === "am" && hours === 12) hours = 0;
+  return Math.min(23 * 60 + 59, Math.max(0, hours * 60 + minutes));
+}
+
+function numericLeaveDuration(value: unknown, fallback = 0) {
+  if (value === null || value === undefined || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function deriveLeaveDuration(startDate: string, endDate: string, startTime: unknown, endTime: unknown, halfDay: boolean, explicitDuration?: unknown, explicitLeaveDays?: unknown) {
+  const explicit = numericLeaveDuration(explicitLeaveDays, numericLeaveDuration(explicitDuration, NaN));
+  if (Number.isFinite(explicit) && explicit > 0) return Number(explicit);
+
   if (halfDay) return 0.5;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+
+  const normalizedStartTime = asString(startTime, "09:00");
+  const normalizedEndTime = asString(endTime, "18:00");
+  const start = new Date(`${startDate}T${normalizedStartTime}:00`);
+  const end = new Date(`${endDate}T${normalizedEndTime}:00`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
-  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1);
+  if (end < start) return 0;
+
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs <= 0) return 0;
+
+  const dayCount = diffMs / 86_400_000;
+  const hours = Math.max(dayCount, 0.5);
+  return Number(Math.max(hours, 0.5).toFixed(2));
+}
+
+function durationDays(startDate: string, endDate: string, halfDay: boolean, startTime?: unknown, endTime?: unknown, explicitDuration?: unknown, explicitLeaveDays?: unknown) {
+  if (halfDay) return 0.5;
+  if (!startDate || !endDate) return 0;
+  const computed = deriveLeaveDuration(startDate, endDate, startTime ?? "09:00", endTime ?? "18:00", false, explicitDuration, explicitLeaveDays);
+  return computed > 0 ? computed : 0;
 }
 
 function isReviewer(role: string) {
@@ -101,7 +140,7 @@ function mapLeave(row: DbRow) {
     endDate,
     reason: asString(row.reason),
     status: asString(row.status, "Pending"),
-    duration: durationDays(startDate, endDate, halfDay),
+    duration: durationDays(startDate, endDate, halfDay, row.start_time, row.end_time, row.duration ?? row.leave_days ?? undefined, row.leave_days ?? undefined),
     halfDay,
     halfDayPeriod: asString(row.half_day_period),
     submittedAt: row.created_at instanceof Date ? row.created_at.toISOString() : asString(row.created_at),
@@ -121,9 +160,9 @@ async function findLeaveRows(viewerUserId: string, viewerRole: string, scope: "a
   }
 
   const result = await pool.query<DbRow>(`
-    SELECT lr.id, lr.user_id, lr.leave_type, lr.start_date, lr.end_date, lr.reason, lr.status,
-           lr.decided_by, lr.decision_reason, lr.decided_at, lr.created_at, lr.updated_at,
-           lr.half_day, lr.half_day_period,
+    SELECT lr.id, lr.user_id, lr.leave_type, lr.start_date, lr.end_date, lr.start_time, lr.end_time,
+           lr.reason, lr.status, lr.duration, lr.leave_days, lr.decided_by, lr.decision_reason,
+           lr.decided_at, lr.created_at, lr.updated_at, lr.half_day, lr.half_day_period,
            u.full_name, u.email, u.role::text AS role,
            e.employee_code, t.trainee_code
     FROM leave_requests lr
@@ -139,9 +178,9 @@ async function findLeaveRows(viewerUserId: string, viewerRole: string, scope: "a
 
 async function findLeaveById(id: number) {
   const result = await pool.query<DbRow>(`
-    SELECT lr.id, lr.user_id, lr.leave_type, lr.start_date, lr.end_date, lr.reason, lr.status,
-           lr.decided_by, lr.decision_reason, lr.decided_at, lr.created_at, lr.updated_at,
-           lr.half_day, lr.half_day_period,
+    SELECT lr.id, lr.user_id, lr.leave_type, lr.start_date, lr.end_date, lr.start_time, lr.end_time,
+           lr.reason, lr.status, lr.duration, lr.leave_days, lr.decided_by, lr.decision_reason,
+           lr.decided_at, lr.created_at, lr.updated_at, lr.half_day, lr.half_day_period,
            u.full_name, u.email, u.role::text AS role,
            e.employee_code, t.trainee_code
     FROM leave_requests lr
@@ -169,9 +208,12 @@ router.post("/leave-requests", requireAuth, async (req, res): Promise<void> => {
   const leaveType = normalizeLeaveType(req.body?.type ?? req.body?.leaveType);
   const startDate = asString(req.body?.startDate).trim();
   const endDate = asString(req.body?.endDate).trim();
+  const startTime = asString(req.body?.startTime ?? req.body?.start_time, "09:00").trim() || "09:00";
+  const endTime = asString(req.body?.endTime ?? req.body?.end_time, "18:00").trim() || "18:00";
   const reason = asString(req.body?.reason).trim();
-  const halfDay = Boolean(req.body?.halfDay);
-  const halfDayPeriod = asString(req.body?.halfDayPeriod).trim() || null;
+  const halfDay = Boolean(req.body?.halfDay ?? req.body?.half_day);
+  const halfDayPeriod = asString(req.body?.halfDayPeriod ?? req.body?.half_day_period).trim() || null;
+  const explicitDuration = numericLeaveDuration(req.body?.duration ?? req.body?.leaveDays ?? req.body?.leave_days, NaN);
 
   if (!leaveType || !startDate || !endDate || !reason) {
     res.status(400).json({ error: "Leave type, start date, end date, and reason are required." });
@@ -181,8 +223,18 @@ router.post("/leave-requests", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "End date must be after start date." });
     return;
   }
+  if (startDate === endDate && endTime && startTime && parseTimeMinutes(endTime) < parseTimeMinutes(startTime)) {
+    res.status(400).json({ error: "End time must be after start time on the same day." });
+    return;
+  }
   if (reason.length < 15) {
     res.status(400).json({ error: "Reason must be at least 15 characters." });
+    return;
+  }
+
+  const finalDuration = deriveLeaveDuration(startDate, endDate, startTime, endTime, halfDay, explicitDuration, req.body?.leaveDays ?? req.body?.leave_days);
+  if (!Number.isFinite(finalDuration) || finalDuration <= 0) {
+    res.status(400).json({ error: "Leave duration must be greater than zero." });
     return;
   }
 
@@ -190,10 +242,10 @@ router.post("/leave-requests", requireAuth, async (req, res): Promise<void> => {
   try {
     await client.query("BEGIN");
     const inserted = await client.query<{ id: number }>(`
-      INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, reason, half_day, half_day_period)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, start_time, end_time, reason, half_day, half_day_period, duration, leave_days)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING id
-    `, [req.authUser!.userId, leaveType, startDate, endDate, reason, halfDay, halfDayPeriod]);
+    `, [req.authUser!.userId, leaveType, startDate, endDate, startTime, endTime, reason, halfDay, halfDayPeriod, finalDuration, finalDuration]);
 
     const reviewers = await reviewerUserIds(req.authUser!.userId);
     const applicantName = req.authUser!.fullName;

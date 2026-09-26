@@ -32,7 +32,7 @@ const EMPTY_FORM = {
   name: "", email: "", phone: "", college: "",
   role: "", project: "", manager: "",
   startDate: "", endDate: "", cgpa: "", degree: "B.Tech",
-  year: "", gender: "", dob: "", address: "", temporaryPassword: "", status: "Active" as StudentStatus,
+  year: "", gender: "", dob: "", address: "", salary: "", temporaryPassword: "", status: "Active" as StudentStatus,
 };
 
 function getUserId(name: string, id: string): string {
@@ -58,6 +58,7 @@ function studentToForm(student: Student) {
     gender: student.gender,
     dob: student.dob,
     address: student.address,
+    salary: String(student.salary ?? 0),
     temporaryPassword: "",
     status: student.status as StudentStatus,
   };
@@ -205,10 +206,12 @@ export default function StudentManagement() {
     if (!form.name.trim()) e.name = "Name is required.";
     if (!form.role) e.role = "Designation is required.";
     if (!form.project.trim()) e.project = "Project is required.";
+    if (form.salary === "" || Number.isNaN(Number(form.salary)) || Number(form.salary) < 0) e.salary = "Salary is required and must be non-negative.";
     if (!form.startDate) e.startDate = "Start date is required.";
     if (!form.endDate) e.endDate = "End date is required.";
     if (!form.temporaryPassword.trim()) e.temporaryPassword = "Temporary password is required.";
     if (form.temporaryPassword.trim() && form.temporaryPassword.trim().length < 8) e.temporaryPassword = "Use at least 8 characters.";
+    if (form.phone && !/^\d{10}$/.test(form.phone)) e.phone = "Please enter a valid 10-digit phone number.";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -231,7 +234,7 @@ export default function StudentManagement() {
           "Content-Type": "application/json; charset=utf-8",
           Authorization: `Bearer ${session.token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, salary: Number(form.salary) }),
       });
       const payload = await response.json().catch(() => null) as {
         intern?: Student & { userId?: string };
@@ -316,39 +319,58 @@ export default function StudentManagement() {
     if (!editForm.project.trim()) e.project = "Project is required.";
     if (!editForm.startDate) e.startDate = "Start date is required.";
     if (!editForm.endDate) e.endDate = "End date is required.";
+    if (editForm.phone && !/^\d{10}$/.test(editForm.phone)) e.phone = "Please enter a valid 10-digit phone number.";
     setEditErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editStudent || !validateEdit()) return;
 
-    setStudentList(prev => prev.map(student =>
-      student.id === editStudent.id
-        ? {
-            ...student,
-            name: editForm.name.trim(),
-            email: editForm.email.trim() || student.email,
-            phone: editForm.phone.trim() || "—",
-            college: editForm.college.trim() || "—",
-            role: editForm.role,
-            project: editForm.project.trim(),
-            manager: editForm.manager.trim() || "—",
-            startDate: editForm.startDate,
-            endDate: editForm.endDate,
-            status: editForm.status,
-            cgpa: parseFloat(editForm.cgpa) || 0,
-            degree: editForm.degree.trim() || "B.Tech",
-            year: editForm.year.trim(),
-            gender: editForm.gender.trim(),
-            dob: editForm.dob,
-            address: editForm.address.trim(),
-          }
-        : student
-    ));
+    const session = getAuthSession();
+    if (!session) {
+      toast({ title: "Session expired", description: "Please log in again before updating an intern.", variant: "destructive" });
+      return;
+    }
 
-    toast({ title: "Intern Updated", description: `${editForm.name.trim()} details have been saved.` });
-    closeEditDialog();
+    try {
+      const response = await fetch(`/api/interns/${encodeURIComponent(editStudent.id)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: JSON.stringify({
+          name: editForm.name,
+          email: editForm.email,
+          phone: editForm.phone,
+          role: editForm.role,
+          project: editForm.project,
+          manager: editForm.manager,
+          startDate: editForm.startDate,
+          endDate: editForm.endDate,
+          gender: editForm.gender,
+          dob: editForm.dob,
+          address: editForm.address,
+          status: editForm.status,
+        }),
+      });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Unable to update intern.");
+      }
+
+      await loadInterns();
+      toast({ title: "Intern Updated", description: `${editForm.name.trim()} details have been saved.` });
+      closeEditDialog();
+    } catch (error) {
+      toast({
+        title: "Unable to update intern",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const openProjectDialog = (student: Student) => {
@@ -674,7 +696,13 @@ export default function StudentManagement() {
             </div>
             <div className="space-y-1.5">
               <Label>Phone</Label>
-              <Input placeholder="555-0101" value={form.phone} onChange={f("phone")} />
+              <Input placeholder="9876543210" value={form.phone} onChange={f("phone")} />
+              {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Salary <span className="text-destructive">*</span></Label>
+              <Input type="number" min="0" step="1000" placeholder="e.g. 35000" value={form.salary} onChange={f("salary")} />
+              {errors.salary && <p className="text-xs text-destructive">{errors.salary}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Start Date <span className="text-destructive">*</span></Label>
@@ -748,6 +776,7 @@ export default function StudentManagement() {
                 <div className="space-y-1.5">
                   <Label>Phone</Label>
                   <Input value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} />
+                  {editErrors.phone && <p className="text-xs text-destructive">{editErrors.phone}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Start Date <span className="text-destructive">*</span></Label>
@@ -765,21 +794,6 @@ export default function StudentManagement() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>CGPA</Label>
-                  <Input inputMode="decimal" value={editForm.cgpa} onChange={e => setEditForm(p => ({ ...p, cgpa: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>College</Label>
-                  <Input value={editForm.college} onChange={e => setEditForm(p => ({ ...p, college: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Degree / Year</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input value={editForm.degree} onChange={e => setEditForm(p => ({ ...p, degree: e.target.value }))} />
-                    <Input value={editForm.year} onChange={e => setEditForm(p => ({ ...p, year: e.target.value }))} />
-                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label>DOB</Label>

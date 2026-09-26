@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type DragEvent } from "react";
 import {
   Plus, Search, LayoutGrid, List, AlertCircle, MoreHorizontal,
   UserPlus, Edit3, MoveRight, Copy, Archive, Trash2, ExternalLink,
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -25,10 +25,12 @@ import {
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { tasks as initialTasks, students } from "@/data/mockData";
+import { tasks as initialTasks, staff, students } from "@/data/mockData";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { getAuthSession } from "@/lib/auth";
+import { APP_DATA_UPDATED_EVENT, apiJson, refreshAppData } from "@/lib/api";
 
 /* ─── Types ──────────────────────────────────────────────── */
 type Task = typeof initialTasks[0] & {
@@ -64,6 +66,7 @@ const JIRA_COLUMNS = [
   { id: "Blocked",    label: "Blocked",     icon: AlertCircle,  topColor: "border-t-red-500",    headerBg: "bg-red-50/60",       badge: "bg-red-200 text-red-700" },
   { id: "Done",       label: "Done",        icon: CheckCircle2, topColor: "border-t-green-500",  headerBg: "bg-green-50/60",     badge: "bg-green-200 text-green-700" },
 ];
+const INTERN_COLUMN_IDS = new Set(["To Do", "In Progress", "Review", "Done"]);
 const COLUMN_ORDER = Object.fromEntries(JIRA_COLUMNS.map((col, index) => [col.id, index]));
 const PRIORITY_ORDER: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
@@ -74,6 +77,12 @@ function normalizeToColumn(status: string): string {
     "In Progress": "In Progress", "To Do": "To Do", "Not Started": "To Do",
     "Testing": "Testing", "Review": "Review", "Blocked": "Blocked",
   } as Record<string, string>)[status] ?? "To Do";
+}
+
+function getInternBoardColumn(column?: string) {
+  if (column === "Testing") return "Review";
+  if (column === "Blocked") return "To Do";
+  return column ?? "To Do";
 }
 
 function deriveTicketType(t: { title: string; description: string }): Task["ticketType"] {
@@ -127,6 +136,15 @@ function enrich(t: typeof initialTasks[0], colOverride?: string): Task {
     labels: [],
     column: normalizeToColumn(colOverride ?? t.status),
   };
+}
+
+function buildTaskList() {
+  return initialTasks.map(t => enrich(t, COLUMN_OVERRIDES[t.id]));
+}
+
+function upsertTask(tasks: Task[], task: typeof initialTasks[0]) {
+  const enrichedTask = enrich(task, task.status);
+  return [enrichedTask, ...tasks.filter(existing => existing.id !== task.id)];
 }
 
 /* ─── Action Dropdown ────────────────────────────────────── */
@@ -255,6 +273,9 @@ function AssignDialog({ task, open, onClose, onSave }: {
 }) {
   const [assignee, setAssignee] = useState("");
   useEffect(() => { if (task) setAssignee(task.assignedTo); }, [task]);
+  const activeEmployees = staff.filter(employee =>
+    employee.status !== "Inactive" && employee.role.toUpperCase() === "EMPLOYEE"
+  );
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-sm">
@@ -264,9 +285,9 @@ function AssignDialog({ task, open, onClose, onSave }: {
             Assign <span className="font-semibold text-foreground">{task?.title}</span> to:
           </p>
           <Select value={assignee} onValueChange={setAssignee}>
-            <SelectTrigger><SelectValue placeholder="Select Intern" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
             <SelectContent>
-              {students.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+              {activeEmployees.map(employee => <SelectItem key={employee.id} value={employee.name}>{employee.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -475,7 +496,19 @@ function AttachmentDialog({ open, onClose }: { open: boolean; onClose: () => voi
 }
 
 /* ─── Kanban Card ────────────────────────────────────────── */
-function KanbanCard({ task, onAction }: { task: Task; onAction: (id: string, action: string) => void }) {
+function KanbanCard({
+  task,
+  onAction,
+  showActions,
+  onDragStart,
+  onDragEnd,
+}: {
+  task: Task;
+  onAction: (id: string, action: string) => void;
+  showActions: boolean;
+  onDragStart: (task: Task, event: DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+}) {
   const typeConf = TICKET_TYPE_CONFIG[task.ticketType ?? "Task"];
   const TypeIcon = typeConf.icon;
   const priConf  = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.Medium;
@@ -483,9 +516,19 @@ function KanbanCard({ task, onAction }: { task: Task; onAction: (id: string, act
   const isBlocked = task.column === "Blocked";
 
   return (
-    <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}>
+    <div
+      draggable
+      onDragStart={event => onDragStart(task, event)}
+      onDragEnd={onDragEnd}
+    >
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+    >
       <Card className={cn(
-        "cursor-pointer hover:shadow-md transition-all border group",
+        "cursor-grab active:cursor-grabbing hover:shadow-md transition-all border group",
         isDone && "opacity-75",
         isBlocked && "border-red-200 dark:border-red-800"
       )}>
@@ -500,7 +543,7 @@ function KanbanCard({ task, onAction }: { task: Task; onAction: (id: string, act
                 {ticketId(task.id, task.ticketType ?? "Task")}
               </span>
             </div>
-            <ActionDropdown onAction={action => onAction(task.id, action)} />
+            {showActions && <ActionDropdown onAction={action => onAction(task.id, action)} />}
           </div>
 
           {/* Title */}
@@ -557,21 +600,39 @@ function KanbanCard({ task, onAction }: { task: Task; onAction: (id: string, act
         </CardContent>
       </Card>
     </motion.div>
+    </div>
   );
 }
 
 /* ─── Main Component ─────────────────────────────────────── */
 export default function TaskManagement() {
   const { toast } = useToast();
+  const session = getAuthSession();
+  const currentRole = session?.user.role;
+  const isAdmin = currentRole === "ADMIN";
+  const isEmployee = currentRole === "EMPLOYEE";
+  const isIntern = currentRole === "INTERN";
+  const visibleColumns = isIntern ? JIRA_COLUMNS.filter(col => INTERN_COLUMN_IDS.has(col.id)) : JIRA_COLUMNS;
+  const boardGridClass = isIntern ? "grid-cols-4 min-w-[880px]" : "grid-cols-6 min-w-[1320px]";
+  const openedTaskIdRef = useRef<string | null>(null);
   const [viewMode, setViewMode]           = useState<"kanban" | "list">("kanban");
   const [searchTerm, setSearchTerm]       = useState("");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterType, setFilterType]       = useState("all");
   const [createOpen, setCreateOpen]       = useState(false);
+  const [isCreating, setIsCreating]       = useState(false);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [dragAssignDialog, setDragAssignDialog] = useState<{
+    open: boolean;
+    task: Task | null;
+    fromColumn: string;
+    toColumn: string;
+    assignee: string;
+  }>({ open: false, task: null, fromColumn: "", toColumn: "", assignee: "" });
+  const [isAssigningDraggedTask, setIsAssigningDraggedTask] = useState(false);
 
-  const [taskList, setTaskList] = useState<Task[]>(() =>
-    initialTasks.map(t => enrich(t, COLUMN_OVERRIDES[t.id]))
-  );
+  const [taskList, setTaskList] = useState<Task[]>(buildTaskList);
 
   // Dialog states
   const [editDialog,     setEditDialog]     = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
@@ -586,18 +647,68 @@ export default function TaskManagement() {
   const [newTask, setNewTask] = useState({
     title: "", description: "", assignedTo: "", priority: "Medium", dueDate: "", column: "To Do",
   });
+  const activeEmployees = staff.filter(employee =>
+    employee.status !== "Inactive" && employee.role.toUpperCase() === "EMPLOYEE"
+  );
+  const currentEmployee = staff.find(employee =>
+    employee.userId === session?.user.userId || employee.email === session?.user.email
+  );
+  const assignableInternIds = new Set(currentEmployee?.assignedInterns ?? []);
+  const activeInterns = students.filter(student =>
+    student.status !== "Inactive" && (!isEmployee || assignableInternIds.has(student.id))
+  );
+  const assigneeOptions = isEmployee
+    ? activeInterns.map(intern => ({ key: intern.id, value: intern.userId ?? intern.id, label: intern.name }))
+    : activeEmployees.map(employee => ({ key: employee.id, value: employee.userId ?? employee.name, label: employee.name }));
+  const assigneePlaceholder = isEmployee ? "Select Intern" : "Select Employee";
+
+  useEffect(() => {
+    const syncTasks = () => setTaskList(buildTaskList());
+    window.addEventListener(APP_DATA_UPDATED_EVENT, syncTasks);
+    return () => window.removeEventListener(APP_DATA_UPDATED_EVENT, syncTasks);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("createTicket") === "1") {
-      setCreateOpen(true);
       params.delete("createTicket");
       const nextSearch = params.toString();
       window.history.replaceState(null, "", `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`);
+      if (!isIntern) {
+        setCreateOpen(true);
+      }
     }
-  }, []);
+  }, [isIntern]);
 
-  const filtered = taskList.filter(t => {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const taskId = params.get("taskId");
+    if (!taskId || openedTaskIdRef.current === taskId) return;
+
+    const task = taskList.find(t => t.id === taskId || ticketId(t.id, t.ticketType ?? "Task") === taskId);
+    if (!task) return;
+
+    openedTaskIdRef.current = taskId;
+    setViewDialog({ open: true, task });
+    params.delete("taskId");
+    const nextSearch = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`);
+  }, [taskList]);
+
+  const visibleTaskList = taskList.filter(task => {
+    if (!session) return false;
+    if (isIntern) {
+      return task.assignedToUserId === session.user.userId || task.assignedTo === session.user.fullName;
+    }
+    if (isEmployee) {
+      return task.assignedToUserId === session.user.userId ||
+        task.createdByUserId === session.user.userId ||
+        task.assignedTo === session.user.fullName;
+    }
+    return true;
+  });
+
+  const filtered = visibleTaskList.filter(t => {
     const q = searchTerm.toLowerCase();
     const matchSearch = !q || t.title.toLowerCase().includes(q) || t.assignedTo.toLowerCase().includes(q) ||
       ticketId(t.id, t.ticketType ?? "Task").toLowerCase().includes(q);
@@ -607,6 +718,7 @@ export default function TaskManagement() {
   }).sort(sortTasks);
 
   const handleAction = (taskId: string, action: string) => {
+    if (!isAdmin) return;
     const task = taskList.find(t => t.id === taskId) ?? null;
     switch (action) {
       case "Edit":            setEditDialog({ open: true, task }); break;
@@ -627,8 +739,7 @@ export default function TaskManagement() {
         }
         break;
       case "Archive":
-        setTaskList(prev => prev.map(t => t.id === taskId ? { ...t, column: "Done", status: "Completed", progress: 100 } : t));
-        toast({ title: "Ticket archived" });
+        void saveMove(taskId, "Done");
         break;
       case "Delete":
         setTaskList(prev => prev.filter(t => t.id !== taskId));
@@ -639,35 +750,182 @@ export default function TaskManagement() {
     }
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
+    if (isIntern) return;
     if (!newTask.title || !newTask.assignedTo) return;
-    const raw = {
-      id: `TSK${String(taskList.length + 1).padStart(3, "0")}`,
-      title: newTask.title, description: newTask.description,
-      assignedTo: newTask.assignedTo, priority: newTask.priority,
-      dueDate: newTask.dueDate || new Date().toISOString().split("T")[0],
-      status: newTask.column, attachments: 0,
-    };
-    setTaskList(prev => [enrich(raw, newTask.column), ...prev]);
-    setNewTask({ title: "", description: "", assignedTo: "", priority: "Medium", dueDate: "", column: "To Do" });
-    setCreateOpen(false);
-    toast({ title: "Ticket created", description: `"${raw.title}" added to ${newTask.column}.` });
+    setIsCreating(true);
+    try {
+      const payload = await apiJson<{ task: typeof initialTasks[0] }>("/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          title: newTask.title,
+          description: newTask.description,
+          assignedTo: newTask.assignedTo,
+          priority: newTask.priority,
+          dueDate: newTask.dueDate || new Date().toISOString().split("T")[0],
+          status: newTask.column,
+        }),
+      });
+
+      setTaskList(prev => upsertTask(prev, payload.task));
+      await refreshAppData();
+      setNewTask({ title: "", description: "", assignedTo: "", priority: "Medium", dueDate: "", column: "To Do" });
+      setCreateOpen(false);
+      toast({ title: "Ticket created", description: `"${payload.task.title}" added to ${payload.task.status}.` });
+    } catch (error) {
+      toast({
+        title: "Ticket creation failed",
+        description: error instanceof Error ? error.message : "Unable to save the ticket.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
-  const saveEdit     = (id: string, data: Partial<Task>) =>
-    setTaskList(prev => prev.map(t => t.id === id ? { ...t, ...data, storyPoints: sp(data.priority ?? t.priority) } : t));
-  const saveAssign   = (id: string, assignedTo: string) =>
-    setTaskList(prev => prev.map(t => t.id === id ? { ...t, assignedTo } : t));
-  const saveMove     = (id: string, column: string) =>
-    setTaskList(prev => prev.map(t => t.id === id ? { ...t, column, progress: column === "Done" ? 100 : t.progress } : t));
-  const savePriority = (id: string, priority: string) =>
-    setTaskList(prev => prev.map(t => t.id === id ? { ...t, priority, storyPoints: sp(priority) } : t));
+  const persistTaskUpdate = async (id: string, data: Partial<Task>, extraBody: Record<string, unknown> = {}) => {
+    const payload = await apiJson<{ task: typeof initialTasks[0] }>(`/tasks/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        title: data.title,
+        description: data.description,
+        assignedTo: data.assignedTo,
+        priority: data.priority,
+        dueDate: data.dueDate,
+        status: data.column ?? data.status,
+        ...extraBody,
+      }),
+    });
+    setTaskList(prev => upsertTask(prev, payload.task));
+    await refreshAppData();
+    return payload.task;
+  };
 
-  const totalDone    = taskList.filter(t => t.column === "Done").length;
-  const totalBlocked = taskList.filter(t => t.column === "Blocked").length;
-  const totalActive  = taskList.filter(t => t.column === "In Progress").length;
-  const doneSP       = taskList.filter(t => t.column === "Done").reduce((a, t) => a + (t.storyPoints ?? 0), 0);
-  const totalSP      = taskList.reduce((a, t) => a + (t.storyPoints ?? 0), 0);
+  const saveEdit = async (id: string, data: Partial<Task>) => {
+    try {
+      await persistTaskUpdate(id, data);
+      toast({ title: "Ticket updated" });
+    } catch (error) {
+      toast({ title: "Ticket update failed", description: error instanceof Error ? error.message : "Unable to update ticket.", variant: "destructive" });
+    }
+  };
+  const saveAssign = async (id: string, assignedTo: string) => {
+    try {
+      await persistTaskUpdate(id, { assignedTo });
+      toast({ title: "Ticket assigned", description: `Assigned to ${assignedTo}` });
+    } catch (error) {
+      toast({ title: "Assignment failed", description: error instanceof Error ? error.message : "Unable to assign ticket.", variant: "destructive" });
+    }
+  };
+  const saveMove = async (id: string, column: string) => {
+    try {
+      await persistTaskUpdate(id, { column, status: column });
+      toast({ title: "Ticket moved", description: `Moved to ${column}` });
+    } catch (error) {
+      toast({ title: "Move failed", description: error instanceof Error ? error.message : "Unable to move ticket.", variant: "destructive" });
+    }
+  };
+  const savePriority = async (id: string, priority: string) => {
+    try {
+      await persistTaskUpdate(id, { priority });
+      toast({ title: "Priority updated", description: priority });
+    } catch (error) {
+      toast({ title: "Priority update failed", description: error instanceof Error ? error.message : "Unable to update priority.", variant: "destructive" });
+    }
+  };
+
+  const startTaskDrag = (task: Task, event: DragEvent<HTMLDivElement>) => {
+    setDraggedTaskId(task.id);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", task.id);
+  };
+
+  const clearTaskDrag = () => {
+    setDraggedTaskId(null);
+    setDragOverColumn(null);
+  };
+
+  const handleColumnDragOver = (event: DragEvent<HTMLDivElement>, columnId: string) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverColumn(columnId);
+  };
+
+  const handleColumnDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+      setDragOverColumn(null);
+    }
+  };
+
+  const handleColumnDrop = (event: DragEvent<HTMLDivElement>, columnId: string) => {
+    event.preventDefault();
+    const taskId = draggedTaskId ?? event.dataTransfer.getData("text/plain");
+    clearTaskDrag();
+    if (!taskId) return;
+
+    const task = taskList.find(item => item.id === taskId);
+    if (!task) return;
+
+    const currentColumn = isIntern ? getInternBoardColumn(task.column) : task.column ?? "To Do";
+    if (currentColumn === columnId) return;
+
+    if (isAdmin) {
+      const existingAssignee = activeEmployees.find(employee =>
+        employee.userId === task.assignedToUserId || employee.name === task.assignedTo
+      );
+      setDragAssignDialog({
+        open: true,
+        task,
+        fromColumn: currentColumn,
+        toColumn: columnId,
+        assignee: existingAssignee?.userId ?? existingAssignee?.name ?? "",
+      });
+      return;
+    }
+
+    void saveMove(taskId, columnId);
+  };
+
+  const closeDragAssignDialog = () => {
+    if (isAssigningDraggedTask) return;
+    setDragAssignDialog({ open: false, task: null, fromColumn: "", toColumn: "", assignee: "" });
+  };
+
+  const confirmDraggedAssignment = async () => {
+    if (!dragAssignDialog.task || !dragAssignDialog.assignee) return;
+    setIsAssigningDraggedTask(true);
+    try {
+      const updated = await persistTaskUpdate(
+        dragAssignDialog.task.id,
+        {
+          assignedTo: dragAssignDialog.assignee,
+          column: dragAssignDialog.toColumn,
+          status: dragAssignDialog.toColumn,
+        },
+        { notifyAssignment: true },
+      );
+      setDragAssignDialog({ open: false, task: null, fromColumn: "", toColumn: "", assignee: "" });
+      toast({
+        title: "Work assigned",
+        description: `"${updated.title}" moved to ${updated.status}.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Assignment failed",
+        description: error instanceof Error ? error.message : "Unable to assign dragged task.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAssigningDraggedTask(false);
+    }
+  };
+
+  const totalDone    = visibleTaskList.filter(t => t.column === "Done").length;
+  const totalBlocked = visibleTaskList.filter(t => t.column === "Blocked").length;
+  const totalActive  = visibleTaskList.filter(t => t.column === "In Progress").length;
+  const doneSP       = visibleTaskList.filter(t => t.column === "Done").reduce((a, t) => a + (t.storyPoints ?? 0), 0);
+  const totalSP      = visibleTaskList.reduce((a, t) => a + (t.storyPoints ?? 0), 0);
   const hasFilters   = searchTerm || filterPriority !== "all" || filterType !== "all";
 
   return (
@@ -729,9 +987,11 @@ export default function TaskManagement() {
             </Button>
           </div>
 
-          <Button size="sm" className="gap-1.5 h-8 shrink-0" onClick={() => setCreateOpen(true)}>
-            <Plus size={14} />Create
-          </Button>
+          {!isIntern && (
+            <Button size="sm" className="gap-1.5 h-8 shrink-0" onClick={() => setCreateOpen(true)}>
+              <Plus size={14} />Create
+            </Button>
+          )}
         </div>
       </div>
 
@@ -755,13 +1015,24 @@ export default function TaskManagement() {
       {/* ── Board / List ─────────────────────────────── */}
       {viewMode === "kanban" ? (
         <div className="overflow-x-auto pb-4 -mx-1 px-1">
-          <div className="grid grid-cols-6 gap-3 min-w-[1320px] h-[calc(100vh-20rem)] min-h-[460px]">
-          {JIRA_COLUMNS.map(col => {
+          <div className={cn("grid gap-3 h-[calc(100vh-20rem)] min-h-[460px]", boardGridClass)}>
+          {visibleColumns.map(col => {
             const ColIcon = col.icon;
-            const colTasks = filtered.filter(t => t.column === col.id);
+            const colTasks = filtered.filter(t => (isIntern ? getInternBoardColumn(t.column) : t.column) === col.id);
+            const isDragOver = dragOverColumn === col.id;
             return (
-              <div key={col.id} className="min-w-0 flex flex-col">
-                <div className={cn("rounded-xl border border-t-4 overflow-hidden flex flex-col h-full", col.topColor)}>
+              <div
+                key={col.id}
+                className="min-w-0 flex flex-col"
+                onDragOver={event => handleColumnDragOver(event, col.id)}
+                onDragLeave={handleColumnDragLeave}
+                onDrop={event => handleColumnDrop(event, col.id)}
+              >
+                <div className={cn(
+                  "rounded-xl border border-t-4 overflow-hidden flex flex-col h-full transition-all",
+                  col.topColor,
+                  isDragOver && "ring-2 ring-primary/30 bg-primary/5"
+                )}>
                   <div className={cn("flex items-center justify-between px-3 py-2.5 border-b shrink-0", col.headerBg)}>
                     <div className="flex items-center gap-1.5">
                       <ColIcon size={13} className="text-muted-foreground" />
@@ -774,12 +1045,22 @@ export default function TaskManagement() {
                   <div className="flex-1 p-2 space-y-2 overflow-y-auto min-h-0 bg-muted/10">
                     <AnimatePresence>
                       {colTasks.map(task => (
-                        <KanbanCard key={task.id} task={task} onAction={handleAction} />
+                        <KanbanCard
+                          key={task.id}
+                          task={task}
+                          onAction={handleAction}
+                          showActions={isAdmin}
+                          onDragStart={startTaskDrag}
+                          onDragEnd={clearTaskDrag}
+                        />
                       ))}
                     </AnimatePresence>
                     {colTasks.length === 0 && (
-                      <div className="h-16 border-2 border-dashed rounded-xl flex items-center justify-center text-[10px] text-muted-foreground/40">
-                        No tickets
+                      <div className={cn(
+                        "h-16 border-2 border-dashed rounded-xl flex items-center justify-center text-[10px] transition-colors",
+                        isDragOver ? "border-primary/40 text-primary/70 bg-primary/5" : "text-muted-foreground/40"
+                      )}>
+                        {isDragOver ? "Drop here" : "No tickets"}
                       </div>
                     )}
                   </div>
@@ -806,12 +1087,12 @@ export default function TaskManagement() {
                   <TableHead className="text-xs">Status</TableHead>
                   <TableHead className="text-xs">SP</TableHead>
                   <TableHead className="text-xs">Due</TableHead>
-                  <TableHead className="w-10" />
+                  {isAdmin && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="h-28 text-center text-muted-foreground text-sm">No tickets found.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={isAdmin ? 9 : 8} className="h-28 text-center text-muted-foreground text-sm">No tickets found.</TableCell></TableRow>
                 ) : filtered.map(task => {
                   const tc   = TICKET_TYPE_CONFIG[task.ticketType ?? "Task"];
                   const TIcon= tc.icon;
@@ -847,10 +1128,10 @@ export default function TaskManagement() {
                         </span>
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        <Select value={task.column ?? "To Do"} onValueChange={v => saveMove(task.id, v)}>
+                        <Select value={isIntern ? getInternBoardColumn(task.column) : task.column ?? "To Do"} onValueChange={v => saveMove(task.id, v)}>
                           <SelectTrigger className="h-6 text-[10px] w-28"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {JIRA_COLUMNS.map(c => <SelectItem key={c.id} value={c.id} className="text-xs">{c.label}</SelectItem>)}
+                            {visibleColumns.map(c => <SelectItem key={c.id} value={c.id} className="text-xs">{c.label}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -858,9 +1139,11 @@ export default function TaskManagement() {
                       <TableCell className="text-xs text-muted-foreground">
                         {new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </TableCell>
-                      <TableCell onClick={e => e.stopPropagation()}>
-                        <ActionDropdown onAction={action => handleAction(task.id, action)} />
-                      </TableCell>
+                      {isAdmin && (
+                        <TableCell onClick={e => e.stopPropagation()}>
+                          <ActionDropdown onAction={action => handleAction(task.id, action)} />
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -868,13 +1151,84 @@ export default function TaskManagement() {
             </Table>
           </div>
           <div className="p-3 border-t flex items-center justify-between text-xs text-muted-foreground">
-            <span>Showing {filtered.length} of {taskList.length} tickets</span>
+            <span>Showing {filtered.length} of {visibleTaskList.length} tickets</span>
             <span className="font-semibold">{totalDone} Done · {totalBlocked} Blocked · {totalActive} Active</span>
           </div>
         </Card>
       )}
 
       {/* ── Create Ticket Dialog ──────────────────────── */}
+      <Dialog open={dragAssignDialog.open} onOpenChange={(open) => { if (!open) closeDragAssignDialog(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Assign Work</DialogTitle></DialogHeader>
+          {dragAssignDialog.task && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase text-muted-foreground">Task</p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {ticketId(dragAssignDialog.task.id, dragAssignDialog.task.ticketType ?? "Task")}
+                </p>
+                <p className="text-sm font-semibold leading-snug">{dragAssignDialog.task.title}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg border p-3">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground">From Status</p>
+                  <p className="font-medium">{dragAssignDialog.fromColumn}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground">To Status</p>
+                  <p className="font-medium">{dragAssignDialog.toColumn}</p>
+                </div>
+              </div>
+
+              {dragAssignDialog.task.projectName && (
+                <div className="rounded-lg border p-3 text-sm">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground">Project</p>
+                  <p className="font-medium">{dragAssignDialog.task.projectName}</p>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label>Assign To <span className="text-destructive">*</span></Label>
+                <Select
+                  value={dragAssignDialog.assignee}
+                  onValueChange={value => setDragAssignDialog(current => ({ ...current, assignee: value }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                  <SelectContent>
+                    {activeEmployees.map(employee => (
+                      <SelectItem key={employee.id} value={employee.userId ?? employee.name}>
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-5 w-5">
+                            <AvatarImage src={employee.avatarUrl ?? undefined} />
+                            <AvatarFallback className="text-[8px] bg-primary/10 text-primary font-bold">
+                              {employee.name.split(" ").map(part => part[0]).join("").slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span>{employee.name}</span>
+                          <span className="text-[10px] text-muted-foreground">Employee</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDragAssignDialog} disabled={isAssigningDraggedTask}>Cancel</Button>
+            <Button
+              onClick={confirmDraggedAssignment}
+              disabled={isAssigningDraggedTask || !dragAssignDialog.assignee}
+            >
+              {isAssigningDraggedTask ? "Assigning..." : "Assign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {!isIntern && (
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Create Ticket</DialogTitle></DialogHeader>
@@ -893,8 +1247,12 @@ export default function TaskManagement() {
               <div className="space-y-1.5">
                 <Label>Assign To <span className="text-destructive">*</span></Label>
                 <Select value={newTask.assignedTo} onValueChange={v => setNewTask(f => ({...f, assignedTo: v}))}>
-                  <SelectTrigger><SelectValue placeholder="Select Intern" /></SelectTrigger>
-                  <SelectContent>{students.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                  <SelectTrigger><SelectValue placeholder={assigneePlaceholder} /></SelectTrigger>
+                  <SelectContent>
+                    {assigneeOptions.map(option => (
+                      <SelectItem key={option.key} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
@@ -921,26 +1279,29 @@ export default function TaskManagement() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={!newTask.title || !newTask.assignedTo}>Create Ticket</Button>
+            <Button onClick={handleCreate} disabled={isCreating || !newTask.title || !newTask.assignedTo}>
+              {isCreating ? "Creating..." : "Create Ticket"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
 
       {/* ── All Dialogs ───────────────────────────────── */}
       <EditDialog
         task={editDialog.task} open={editDialog.open}
         onClose={() => setEditDialog({ open: false, task: null })}
-        onSave={data => { if (editDialog.task) { saveEdit(editDialog.task.id, data); toast({ title: "Ticket updated" }); } }}
+        onSave={data => { if (editDialog.task) void saveEdit(editDialog.task.id, data); }}
       />
       <AssignDialog
         task={assignDialog.task} open={assignDialog.open}
         onClose={() => setAssignDialog({ open: false, task: null })}
-        onSave={assignee => { if (assignDialog.task) { saveAssign(assignDialog.task.id, assignee); toast({ title: "Ticket assigned", description: `Assigned to ${assignee}` }); } }}
+        onSave={assignee => { if (assignDialog.task) void saveAssign(assignDialog.task.id, assignee); }}
       />
       <MoveDialog
         task={moveDialog.task} open={moveDialog.open}
         onClose={() => setMoveDialog({ open: false, task: null })}
-        onSave={col => { if (moveDialog.task) { saveMove(moveDialog.task.id, col); toast({ title: "Ticket moved", description: `Moved to ${col}` }); } }}
+        onSave={col => { if (moveDialog.task) void saveMove(moveDialog.task.id, col); }}
       />
       <ViewDetailsDialog
         task={viewDialog.task} open={viewDialog.open}
@@ -954,7 +1315,7 @@ export default function TaskManagement() {
       <PriorityDialog
         task={priorityDialog.task} open={priorityDialog.open}
         onClose={() => setPriorityDialog({ open: false, task: null })}
-        onSave={priority => { if (priorityDialog.task) { savePriority(priorityDialog.task.id, priority); toast({ title: "Priority updated", description: priority }); } }}
+        onSave={priority => { if (priorityDialog.task) void savePriority(priorityDialog.task.id, priority); }}
       />
       <LinkIssueDialog open={linkOpen} onClose={() => setLinkOpen(false)} />
       <AttachmentDialog open={attachOpen} onClose={() => setAttachOpen(false)} />

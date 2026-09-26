@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { students, tasks, projects, notifications, type LeaveRequest } from "@/data/mockData";
+import { students, tasks, projects, staff, notifications, type LeaveRequest } from "@/data/mockData";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -67,7 +67,7 @@ function mapLeaveRequest(leave: LeaveRequest): StaffLeave {
 export default function StaffDashboard() {
   const { toast } = useToast();
   const session = getAuthSession();
-  const currentEmployeeId = session?.user.userId ?? "EMP001";
+  const currentEmployeeId = staff.find(employee => employee.userId === session?.user.userId)?.id ?? session?.user.userId ?? "EMP001";
   const currentName = session?.user.fullName ?? "Dr. Smith";
   const myInterns = students.filter(s => s.manager === currentName).slice(0, 4);
   const pendingTasks = tasks.filter(t => t.status === "In Progress");

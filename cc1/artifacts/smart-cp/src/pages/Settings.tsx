@@ -129,7 +129,7 @@ export default function Settings() {
     if (!profile.userId.trim()) errors.userId = "User ID is required.";
     if (!profile.designation.trim()) errors.designation = "Designation is required.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) errors.email = "Enter a valid email address.";
-    if (!/^\d{10}$/.test(profile.phone)) errors.phone = "Enter a valid 10-digit phone number.";
+    if (!/^\d{10}$/.test(profile.phone)) errors.phone = "Please enter a valid 10-digit phone number.";
     setProfileErrors(errors);
     if (Object.keys(errors).length > 0) return;
     toast({ title: "Profile saved", description: "Profile details have been updated." });
@@ -343,7 +343,7 @@ export default function Settings() {
                     </div>
                     <div className="space-y-1.5">
                       <Label className="flex items-center gap-2"><Phone size={15} className="text-muted-foreground" /> Phone Number</Label>
-                      <Input inputMode="numeric" maxLength={10} placeholder="9876543210" value={profile.phone} onChange={updateProfile("phone")} />
+                      <Input inputMode="numeric" placeholder="9876543210" value={profile.phone} onChange={updateProfile("phone")} />
                       {profileErrors.phone && <p className="text-xs text-destructive">{profileErrors.phone}</p>}
                     </div>
                   </CardContent>
@@ -436,7 +436,7 @@ export default function Settings() {
                   </div>
                   <div className="space-y-1.5 md:col-span-2">
                     <Label>Phone Number</Label>
-                    <Input inputMode="numeric" maxLength={10} placeholder="9876543210" value={profile.phone} onChange={updateProfile("phone")} />
+                    <Input inputMode="numeric" placeholder="9876543210" value={profile.phone} onChange={updateProfile("phone")} />
                     {profileErrors.phone && <p className="text-xs text-destructive">{profileErrors.phone}</p>}
                   </div>
                   <div className="space-y-1.5 md:col-span-2">

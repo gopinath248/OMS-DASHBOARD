@@ -22,6 +22,12 @@ function asDateString(value: unknown) {
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
 }
 
+function notificationTaskId(notification: DbRow) {
+  if (asString(notification.category).toLowerCase() !== "task") return undefined;
+  const match = asString(notification.message).match(/\bTask ID\s+(\d+)\b/i);
+  return match?.[1];
+}
+
 function percent(completed: number, total: number) {
   return total > 0 ? Math.round((completed / total) * 100) : 0;
 }
@@ -50,6 +56,9 @@ async function rows(query: string, params: unknown[] = []) {
 
 router.get("/app-data", requireAuth, async (req, res): Promise<void> => {
   try {
+    const canSeeAllProjects = ["ADMIN", "HR", "MANAGER"].includes(req.authUser!.role);
+    const projectVisibilityJoin = canSeeAllProjects ? "" : "JOIN project_members assigned_project ON assigned_project.project_id = p.id AND assigned_project.user_id = $1";
+    const projectVisibilityParams = canSeeAllProjects ? [] : [req.authUser!.userId];
     const [
       employees,
       trainees,
@@ -82,24 +91,27 @@ router.get("/app-data", requireAuth, async (req, res): Promise<void> => {
       rows(`
         SELECT id, name, description, status, created_by, created_at, updated_at
         FROM projects
+        ${projectVisibilityJoin}
         ORDER BY id
-      `),
+      `, projectVisibilityParams),
       rows(`
         SELECT pm.project_id, pm.user_id, pm.member_role, u.role
         FROM project_members pm
         JOIN users u ON u.user_id = pm.user_id
       `),
       rows(`
-        SELECT t.id, t.title, t.description, t.status, t.priority, t.due_at, t.assigned_to,
-               u.full_name AS assigned_name
+        SELECT t.id, t.project_id, t.sprint_id, t.title, t.description, t.status, t.priority,
+               t.due_at, t.assigned_to, t.created_by,
+               u.full_name AS assigned_name, p.name AS project_name
         FROM tasks t
         LEFT JOIN users u ON u.user_id = t.assigned_to
+        LEFT JOIN projects p ON p.id = t.project_id
         ORDER BY t.id
       `),
       rows(`
-        SELECT lr.id, lr.user_id, lr.leave_type, lr.start_date, lr.end_date, lr.reason, lr.status,
-               lr.decided_by, lr.decision_reason, lr.decided_at, lr.created_at,
-               lr.half_day, lr.half_day_period,
+        SELECT lr.id, lr.user_id, lr.leave_type, lr.start_date, lr.end_date, lr.start_time, lr.end_time,
+               lr.reason, lr.status, lr.duration, lr.leave_days, lr.decided_by, lr.decision_reason,
+               lr.decided_at, lr.created_at, lr.half_day, lr.half_day_period,
                u.full_name, u.email, u.role::text AS role, u.avatar_url,
                e.employee_code, t.trainee_code
         FROM leave_requests lr
@@ -226,6 +238,7 @@ router.get("/app-data", requireAuth, async (req, res): Promise<void> => {
         name: asString(employee.full_name),
         designation: asString(employee.designation),
         role: displayRole(employee.role),
+      userId: asString(employee.user_id),
         assignedInterns: [...new Set([...managerAssignedInterns, ...projectAssignedInterns])],
         email: asString(employee.email),
         avatarUrl: asString(employee.avatar_url),
@@ -240,6 +253,10 @@ router.get("/app-data", requireAuth, async (req, res): Promise<void> => {
       title: asString(task.title),
       description: asString(task.description),
       assignedTo: asString(task.assigned_name),
+      assignedToUserId: asString(task.assigned_to),
+      createdByUserId: asString(task.created_by),
+      projectId: asString(task.project_id),
+      projectName: asString(task.project_name),
       priority: asString(task.priority, "Medium"),
       dueDate: asDateString(task.due_at),
       status: asString(task.status, "To Do"),
@@ -247,11 +264,14 @@ router.get("/app-data", requireAuth, async (req, res): Promise<void> => {
     }));
 
     const frontendLeaveRequests = leaveRequests.map((leave) => {
+      const rawDuration = leave.leave_days ?? leave.duration;
+      const numericDuration = Number(rawDuration);
       const startDate = new Date(asString(leave.start_date));
       const endDate = new Date(asString(leave.end_date));
-      const duration = Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())
+      const fallbackDuration = Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())
         ? 0
         : Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1);
+      const duration = Number.isFinite(numericDuration) && numericDuration > 0 ? numericDuration : fallbackDuration;
 
       return {
         id: String(leave.id),
@@ -310,6 +330,7 @@ router.get("/app-data", requireAuth, async (req, res): Promise<void> => {
         message: asString(notification.message),
         time: asDateString(notification.created_at),
         read: Boolean(notification.read_at),
+        taskId: notificationTaskId(notification),
       })),
       projects: frontendProjects,
       projectDocuments: projectDocuments.map((document) => ({

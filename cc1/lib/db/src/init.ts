@@ -103,6 +103,10 @@ const CREATE_TABLE_STATEMENTS = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  `ALTER TABLE projects ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Web Application'`,
+  `ALTER TABLE projects ADD COLUMN IF NOT EXISTS image_color TEXT DEFAULT 'from-blue-500 to-indigo-600'`,
+  `ALTER TABLE projects ADD COLUMN IF NOT EXISTS start_date DATE`,
+  `ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_date DATE`,
   `CREATE TABLE IF NOT EXISTS project_members (
     id SERIAL PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -155,6 +159,10 @@ const CREATE_TABLE_STATEMENTS = [
   `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS decision_reason TEXT`,
   `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS half_day BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS half_day_period TEXT`,
+  `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS start_time TEXT DEFAULT '09:00'`,
+  `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS end_time TEXT DEFAULT '18:00'`,
+  `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS duration NUMERIC(5,2) DEFAULT 1.0`,
+  `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_days NUMERIC(5,2) DEFAULT 1.0`,
   `CREATE TABLE IF NOT EXISTS salary_policy_settings (
     id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
     weekly_off_days INTEGER[] NOT NULL DEFAULT ARRAY[0],

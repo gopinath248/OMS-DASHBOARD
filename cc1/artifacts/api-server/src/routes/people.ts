@@ -20,6 +20,7 @@ type CreateEmployeeBody = {
   role?: unknown;
   bio?: unknown;
   status?: unknown;
+  salary?: unknown;
   temporaryPassword?: unknown;
 };
 
@@ -40,8 +41,12 @@ type CreateInternBody = {
   dob?: unknown;
   address?: unknown;
   status?: unknown;
+  salary?: unknown;
   temporaryPassword?: unknown;
 };
+
+type UpdateEmployeeBody = CreateEmployeeBody;
+type UpdateInternBody = CreateInternBody;
 
 type AssignInternBody = {
   internId?: unknown;
@@ -73,6 +78,14 @@ function optionalText(value: unknown) {
   return parsed === "" ? null : parsed;
 }
 
+function hasInvalidPhone(value: unknown) {
+  if (value === undefined || value === null) return false;
+  if (typeof value !== "string") return true;
+
+  const phone = value.trim();
+  return phone !== "" && !/^\d{10}$/.test(phone);
+}
+
 function optionalDate(value: unknown) {
   const parsed = text(value);
   if (!parsed) return null;
@@ -86,6 +99,17 @@ function optionalNumber(value: unknown) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function asPositiveNumber(value: unknown, fallback: number | null = null) {
+  if (value === null || value === undefined || value === "") return fallback;
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Number(parsed.toFixed(2)) : fallback;
+}
+
+function hasOwnField(body: object, key: string) {
+  return Object.prototype.hasOwnProperty.call(body, key);
 }
 
 function emailFor(name: string, email: unknown) {
@@ -182,14 +206,16 @@ async function readEmployees() {
   const [employees, trainees, projectMembers] = await Promise.all([
     rows(`
       SELECT e.employee_code, e.user_id, e.designation, e.phone, e.bio, e.status,
-             u.full_name, u.email, u.role, u.avatar_url
+             u.full_name, u.email, u.role, u.avatar_url, COALESCE(p.monthly_salary, 0) AS monthly_salary
       FROM employees e
       JOIN users u ON u.user_id = e.user_id
+      LEFT JOIN employee_salary_profiles p ON p.employee_id = e.employee_code AND p.employee_source = 'employees'
       ORDER BY e.employee_code
     `),
     rows(`
-      SELECT trainee_code, user_id, manager
+      SELECT trainee_code, user_id, manager, COALESCE(p.monthly_salary, 0) AS monthly_salary
       FROM trainees
+      LEFT JOIN employee_salary_profiles p ON p.employee_id = trainees.trainee_code AND p.employee_source = 'trainees'
       ORDER BY trainee_code
     `),
     rows(`
@@ -235,6 +261,7 @@ async function readEmployees() {
       phone: asString(employee.phone),
       status: asString(employee.status, "Active"),
       bio: asString(employee.bio),
+      salary: asNumber(employee.monthly_salary, 0),
     };
   });
 }
@@ -243,9 +270,11 @@ async function readTrainees() {
   const trainees = await rows(`
     SELECT t.trainee_code, t.user_id, t.college, t.degree, t.phone, t.project_name, t.manager,
            t.start_date, t.end_date, t.cgpa, t.year, t.gender, t.dob, t.address,
-           t.status, t.created_at, u.full_name, u.email, u.avatar_url
+           t.status, t.created_at, u.full_name, u.email, u.avatar_url,
+           COALESCE(p.monthly_salary, 0) AS monthly_salary
     FROM trainees t
     JOIN users u ON u.user_id = t.user_id
+    LEFT JOIN employee_salary_profiles p ON p.employee_id = t.trainee_code AND p.employee_source = 'trainees'
     ORDER BY t.trainee_code
   `);
 
@@ -271,7 +300,20 @@ async function readTrainees() {
     degree: asString(trainee.degree),
     year: asString(trainee.year),
     skills: [],
+    salary: asNumber(trainee.monthly_salary, 0),
   }));
+}
+
+async function upsertSalaryProfile(client: { query: typeof pool.query }, employeeId: string, employeeSource: "employees" | "trainees", monthlySalary: number) {
+  await client.query(
+    `INSERT INTO employee_salary_profiles (employee_id, employee_source, monthly_salary)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (employee_id) DO UPDATE SET
+       employee_source = EXCLUDED.employee_source,
+       monthly_salary = EXCLUDED.monthly_salary,
+       updated_at = NOW()`,
+    [employeeId, employeeSource, monthlySalary],
+  );
 }
 
 router.get("/employees", requireAuth, async (req, res): Promise<void> => {
@@ -292,6 +334,7 @@ router.post("/employees", requireAuth, requireRole(ADMIN_ONLY), async (req, res)
   const email = emailFor(fullName, body.email);
   const phone = optionalText(body.phone);
   const bio = optionalText(body.bio);
+  const monthlySalary = asPositiveNumber(body.salary);
   const temporaryPassword = text(body.temporaryPassword);
 
   const errors: string[] = [];
@@ -299,8 +342,9 @@ router.post("/employees", requireAuth, requireRole(ADMIN_ONLY), async (req, res)
   assertRequired(designation, "Designation", errors);
   assertRequired(temporaryPassword, "Temporary password", errors);
   if (!role) errors.push("Role must be ADMIN, EMPLOYEE, INTERN, HR, or MANAGER.");
+  if (monthlySalary === null) errors.push("Salary must be a valid non-negative number.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("A valid email is required.");
-  if (phone && !/^\d{10}$/.test(phone)) errors.push("Phone must be a 10-digit number.");
+  if (hasInvalidPhone(body.phone)) errors.push("Please enter a valid 10-digit phone number.");
   if (temporaryPassword && temporaryPassword.length < 8) errors.push("Temporary password must be at least 8 characters.");
 
   if (errors.length > 0) {
@@ -347,6 +391,8 @@ router.post("/employees", requireAuth, requireRole(ADMIN_ONLY), async (req, res)
       [userId, employeeCode, designation, phone, bio, status, req.authUser!.userId],
     );
 
+    await upsertSalaryProfile(client, employeeCode, "employees", monthlySalary ?? 0);
+
     await client.query("COMMIT");
 
     res.status(201).json({
@@ -360,6 +406,7 @@ router.post("/employees", requireAuth, requireRole(ADMIN_ONLY), async (req, res)
         designation,
         role: displayRole(employeeRole),
         bio: bio ?? "",
+        salary: monthlySalary ?? 0,
         status,
         assignedInterns: [],
       },
@@ -583,17 +630,20 @@ router.post("/interns", requireAuth, requireRole(INTERN_CREATORS), async (req, r
   const gender = optionalText(body.gender);
   const dob = optionalDate(body.dob);
   const address = optionalText(body.address);
+  const monthlySalary = asPositiveNumber(body.salary);
   const temporaryPassword = text(body.temporaryPassword);
 
   const errors: string[] = [];
   assertRequired(fullName, "Name", errors);
   assertRequired(temporaryPassword, "Temporary password", errors);
   if (role !== "INTERN") errors.push("Role must be Intern.");
+  if (monthlySalary === null) errors.push("Salary must be a valid non-negative number.");
   assertRequired(projectName, "Project", errors);
   if (!startDate) errors.push("Start date is required.");
   if (!endDate) errors.push("End date is required.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("A valid email is required.");
   if (temporaryPassword && temporaryPassword.length < 8) errors.push("Temporary password must be at least 8 characters.");
+  if (hasInvalidPhone(body.phone)) errors.push("Please enter a valid 10-digit phone number.");
 
   if (errors.length > 0) {
     res.status(400).json({ error: errors.join(" ") });
@@ -654,6 +704,8 @@ router.post("/interns", requireAuth, requireRole(INTERN_CREATORS), async (req, r
       ],
     );
 
+    await upsertSalaryProfile(client, traineeCode, "trainees", monthlySalary ?? 0);
+
     await client.query("COMMIT");
 
     res.status(201).json({
@@ -679,6 +731,7 @@ router.post("/interns", requireAuth, requireRole(INTERN_CREATORS), async (req, r
         degree,
         year: year ?? "",
         skills: [],
+        salary: monthlySalary ?? 0,
       },
       temporaryPassword,
     });
@@ -726,6 +779,165 @@ router.delete("/interns/:id", requireAuth, requireRole(ADMIN_ONLY), async (req, 
     await client.query("ROLLBACK").catch(() => undefined);
     req.log?.error({ err: error }, "Intern deletion failed");
     res.status(500).json({ error: "Unable to delete intern." });
+  } finally {
+    client.release();
+  }
+});
+
+router.put("/employees/:id", requireAuth, requireRole(ADMIN_ONLY), async (req, res): Promise<void> => {
+  const employeeCode = text(req.params.id);
+  const body = req.body as UpdateEmployeeBody;
+  const name = text(body.name);
+  const designation = text(body.designation);
+  const role = normalizeRole(body.role);
+  const status = normalizeStatus(body.status);
+  const email = emailFor(name, body.email);
+  const phone = optionalText(body.phone);
+  const bio = optionalText(body.bio);
+  const monthlySalary = asPositiveNumber(body.salary);
+
+  if (!employeeCode) {
+    res.status(400).json({ error: "Employee ID is required." });
+    return;
+  }
+
+  if (!name || !designation || !role || monthlySalary === null) {
+    res.status(400).json({ error: "Name, designation, role and salary are required." });
+    return;
+  }
+  if (hasInvalidPhone(body.phone)) {
+    res.status(400).json({ error: "Please enter a valid 10-digit phone number." });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const existing = await client.query<DbRow>(`
+      SELECT e.user_id
+      FROM employees e
+      WHERE e.employee_code = $1
+      FOR UPDATE
+    `, [employeeCode]);
+
+    if (!existing.rows[0]) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Employee not found." });
+      return;
+    }
+
+    await client.query(
+      `UPDATE users
+       SET full_name = $1, email = $2, role = $3::user_role, status = $4::user_status, updated_at = NOW()
+       WHERE user_id = $5`,
+      [name, email, role, authStatus(status), existing.rows[0].user_id],
+    );
+
+    await client.query(
+      `UPDATE employees
+       SET designation = $1, phone = $2, bio = $3, status = $4, updated_by = $5, updated_at = NOW()
+       WHERE employee_code = $6`,
+      [designation, phone, bio, status, req.authUser!.userId, employeeCode],
+    );
+
+    await upsertSalaryProfile(client, employeeCode, "employees", monthlySalary);
+    await client.query("COMMIT");
+
+    const employee = (await readEmployees()).find((item) => item.id === employeeCode);
+    res.json({ employee, message: "Employee updated successfully." });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    req.log?.error({ err: error }, "Employee update failed");
+    res.status(500).json({ error: "Unable to update employee." });
+  } finally {
+    client.release();
+  }
+});
+
+router.put("/interns/:id", requireAuth, requireRole(INTERN_CREATORS), async (req, res): Promise<void> => {
+  const traineeCode = text(req.params.id);
+  const body = req.body as UpdateInternBody;
+  const name = text(body.name);
+  const role = normalizeRole(body.role);
+  const status = normalizeStatus(body.status);
+  const email = emailFor(name, body.email);
+  const phone = optionalText(body.phone);
+  const projectName = text(body.project);
+  const manager = optionalText(body.manager);
+  const startDate = optionalDate(body.startDate);
+  const endDate = optionalDate(body.endDate);
+  const gender = optionalText(body.gender);
+  const dob = optionalDate(body.dob);
+  const address = optionalText(body.address);
+  const hasSalary = hasOwnField(body, "salary");
+  const monthlySalary = hasSalary ? asPositiveNumber(body.salary) : null;
+
+  if (!traineeCode) {
+    res.status(400).json({ error: "Intern ID is required." });
+    return;
+  }
+
+  if (!name || role !== "INTERN" || !projectName || !startDate || !endDate || (hasSalary && monthlySalary === null)) {
+    res.status(400).json({ error: "Name, project, dates, role, and valid salary when provided are required." });
+    return;
+  }
+  if (hasInvalidPhone(body.phone)) {
+    res.status(400).json({ error: "Please enter a valid 10-digit phone number." });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const existing = await client.query<DbRow>(`
+      SELECT t.user_id, t.college, t.degree, t.cgpa, t.year
+      FROM trainees t
+      WHERE t.trainee_code = $1
+      FOR UPDATE OF t
+    `, [traineeCode]);
+
+    if (!existing.rows[0]) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Intern not found." });
+      return;
+    }
+
+    const currentIntern = existing.rows[0];
+    const college = hasOwnField(body, "college") ? optionalText(body.college) : currentIntern.college;
+    const degree = hasOwnField(body, "degree") ? optionalText(body.degree) ?? "B.Tech" : currentIntern.degree;
+    const cgpa = hasOwnField(body, "cgpa") ? optionalNumber(body.cgpa) : currentIntern.cgpa;
+    const year = hasOwnField(body, "year") ? optionalText(body.year) : currentIntern.year;
+
+    await client.query(
+      `UPDATE users
+       SET full_name = $1, email = $2, role = 'INTERN'::user_role, status = $3::user_status, updated_at = NOW()
+       WHERE user_id = $4`,
+      [name, email, authStatus(status), existing.rows[0].user_id],
+    );
+
+    await client.query(
+      `UPDATE trainees
+       SET college = $1, degree = $2, phone = $3, project_name = $4, manager = $5,
+           start_date = $6::date, end_date = $7::date, cgpa = $8, year = $9, gender = $10,
+           dob = $11::date, address = $12, status = $13, updated_by = $14, updated_at = NOW()
+       WHERE trainee_code = $15`,
+      [college, degree, phone, projectName, manager, startDate, endDate, cgpa, year, gender, dob, address, status, req.authUser!.userId, traineeCode],
+    );
+
+    if (hasSalary && monthlySalary !== null) {
+      await upsertSalaryProfile(client, traineeCode, "trainees", monthlySalary);
+    }
+
+    await client.query("COMMIT");
+
+    const intern = (await readTrainees()).find((item) => item.id === traineeCode);
+    res.json({ intern, message: "Intern updated successfully." });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    req.log?.error({ err: error }, "Intern update failed");
+    res.status(500).json({ error: "Unable to update intern." });
   } finally {
     client.release();
   }

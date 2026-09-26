@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion } from "framer-motion";
 import {
-  projects as initialProjects, projectDocuments, students,
+  projects as initialProjects, projectDocuments, students, staff,
   Project, ProjectStatus, ProjectCategory
 } from "@/data/mockData";
 import { getAuthSession, roleToNavigationRole } from "@/lib/auth";
@@ -338,9 +338,7 @@ function StudentProjectsView({ allProjects, internId }: { allProjects: Project[]
   const myActiveProjects = allProjects.filter(p =>
     p.status === "Active" && p.assignedInterns.includes(internId)
   );
-  const activePlans = allProjects.filter(p =>
-    p.status === "Active" || p.status === "Planning"
-  );
+  const activePlans = allProjects.filter(p => p.status === "Active" || p.status === "Planning");
   const completedPlans = allProjects.filter(p => p.status === "Completed");
 
   const kpis = [
@@ -513,18 +511,24 @@ export default function Projects() {
   const [showFilters, setShowFilters] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
 
+  const employeeRecord = staff.find(employee => employee.userId === session?.user.userId);
+  const accessibleProjects = role === "employee" && employeeRecord
+    ? allProjects.filter(project => project.assignedStaff.includes(employeeRecord.id))
+    : allProjects;
+
   if (role === "intern") {
     const internRecord = students.find(student =>
       student.userId === session?.user.userId ||
       student.id === session?.user.userId ||
       (!!session?.user.email && student.email.toLowerCase() === session.user.email.toLowerCase())
     );
-    return <StudentProjectsView allProjects={allProjects} internId={internRecord?.id ?? session?.user.userId ?? ""} />;
+    const internId = internRecord?.id ?? session?.user.userId ?? "";
+    return <StudentProjectsView allProjects={allProjects.filter(project => project.assignedInterns.includes(internId))} internId={internId} />;
   }
 
   const docCountFor = (id: string) => projectDocuments.filter(d => d.projectId === id).length;
 
-  const visibleProjects = allProjects.filter(p => {
+  const visibleProjects = accessibleProjects.filter(p => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.description.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === "All" || p.status === filterStatus;
     const matchCategory = filterCategory === "All" || p.category === filterCategory;
@@ -532,9 +536,9 @@ export default function Projects() {
   });
 
   const stats = {
-    total: allProjects.length,
-    active: allProjects.filter(p => p.status === "Active").length,
-    completed: allProjects.filter(p => p.status === "Completed").length,
+    total: accessibleProjects.length,
+    active: accessibleProjects.filter(p => p.status === "Active").length,
+    completed: accessibleProjects.filter(p => p.status === "Completed").length,
     totalDocs: projectDocuments.length,
   };
 
@@ -544,7 +548,7 @@ export default function Projects() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Projects Repository</h1>
         </div>
-        {(role === "admin" || role === "employee") && (
+        {role === "admin" && (
           <Button className="gap-2 shrink-0" onClick={() => setShowAddDialog(true)}>
             <Plus size={16} /> Add Project
           </Button>

@@ -37,6 +37,15 @@ function emitAuthSessionChanged(): void {
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
+function notifyLogout(token: string | null): void {
+  if (!token) return;
+  fetch("/api/auth/logout", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
 export function normalizeAuthRole(role: unknown): AuthRole | null {
   if (typeof role !== "string") return null;
 
@@ -117,10 +126,13 @@ function isTokenExpired(token: string): boolean {
 }
 
 export function clearAuthSession(): void {
+  const token = localStorage.getItem(TOKEN_KEY);
   const changed =
-    localStorage.getItem(TOKEN_KEY) !== null ||
+    token !== null ||
     localStorage.getItem(USER_KEY) !== null ||
     localStorage.getItem(LEGACY_ROLE_KEY) !== null;
+
+  if (changed) notifyLogout(token);
 
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);

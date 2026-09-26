@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect, type MouseEvent as ReactMouseEvent } from "react";
 import {
   Hash, Send, Search, Pin, ChevronDown, ChevronRight,
   Users, Paperclip, Smile, AtSign, MoreHorizontal, Phone,
@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAuthSession, roleToNavigationRole, type NavigationRole } from "@/lib/auth";
+import { getChatPresenceSnapshot, recordChatPresence } from "@/lib/chatPresence";
 
 type UserStatus = "online" | "away" | "offline" | "busy";
 type MessageReaction = { emoji: string; count: number; reacted?: boolean };
@@ -146,6 +147,10 @@ type RecentActivity = {
 
 const PENDING_APPROVALS: ApprovalItem[] = [];
 const RECENT_ACTIVITIES: RecentActivity[] = [];
+const LEFT_PANEL_MIN_WIDTH = 220;
+const LEFT_PANEL_DEFAULT_WIDTH = 300;
+const LEFT_PANEL_MAX_WIDTH = 460;
+const CHAT_CONTENT_MIN_WIDTH = 360;
 
 function statusDot(status: UserStatus) {
   const map: Record<UserStatus, string> = {
@@ -375,7 +380,7 @@ function MessageBubble({ msg, onReact, onCopy, isSelf }: MessageBubbleProps) {
   );
 }
 
-export default function CommandCenter() {
+export default function CommandCenter({ unreadCount = 0 }: { unreadCount?: number }) {
   const roleInfo   = getRoleInfo();
 
   const [channels, setChannels]             = useState<Channel[]>(CHANNELS);
@@ -402,12 +407,15 @@ export default function CommandCenter() {
   const [conversationMembers, setConversationMembers] = useState<Record<string, DmUser[]>>({});
   const [activeCall, setActiveCall] = useState<{ mode: "phone" | "video"; name: string } | null>(null);
   const [callError, setCallError] = useState("");
+  const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_PANEL_DEFAULT_WIDTH);
+  const chatShellRef                        = useRef<HTMLDivElement>(null);
   const scrollRef                           = useRef<HTMLDivElement>(null);
   const inputRef                            = useRef<HTMLTextAreaElement>(null);
   const fileInputRef                        = useRef<HTMLInputElement>(null);
   const mediaStreamRef                      = useRef<MediaStream | null>(null);
   const videoRef                            = useRef<HTMLVideoElement>(null);
   const requestedConversationId             = useRef(new URLSearchParams(window.location.search).get("conversation"));
+  const countedUnreadMessageIds             = useRef<Set<string>>(new Set());
 
   const currentChannel = channels.find(c => c.id === activeChannel);
   const currentDm      = visibleDms.find(d => d.id === activeDm);
@@ -426,6 +434,40 @@ export default function CommandCenter() {
     .filter(member => member.id !== roleInfo.userId);
   const quickEmojis = ["😀", "😂", "👍", "❤️", "🎉", "🙏", "🔥", "✅", "🙌", "👏"];
 
+  const clampLeftPanelWidth = useCallback((width: number) => {
+    const shellWidth = chatShellRef.current?.getBoundingClientRect().width ?? window.innerWidth;
+    const maxByViewport = Math.max(LEFT_PANEL_MIN_WIDTH, shellWidth - CHAT_CONTENT_MIN_WIDTH);
+    const maxWidth = Math.min(LEFT_PANEL_MAX_WIDTH, maxByViewport);
+    return Math.min(Math.max(width, LEFT_PANEL_MIN_WIDTH), maxWidth);
+  }, []);
+
+  const startLeftPanelResize = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = leftPanelWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      setLeftPanelWidth(clampLeftPanelWidth(startWidth + moveEvent.clientX - startX));
+    };
+    const handleMouseUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }, [clampLeftPanelWidth, leftPanelWidth]);
+
+  useEffect(() => {
+    const handleResize = () => setLeftPanelWidth(width => clampLeftPanelWidth(width));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [clampLeftPanelWidth]);
+
   const clearConversationUnread = useCallback((conversationId: string) => {
     setChannels(prev => prev.map(channel =>
       channel.id === conversationId ? { ...channel, unread: 0 } : channel
@@ -439,12 +481,12 @@ export default function CommandCenter() {
     }
   }, [directConversationIds]);
 
-  const incrementConversationUnread = useCallback((conversationId: string) => {
+  const incrementConversationUnread = useCallback((conversationId: string, senderId?: string | null) => {
     setChannels(prev => prev.map(channel =>
       channel.id === conversationId ? { ...channel, unread: channel.unread + 1 } : channel
     ));
 
-    const dmUserId = Object.entries(directConversationIds).find(([, id]) => id === conversationId)?.[0];
+    const dmUserId = Object.entries(directConversationIds).find(([, id]) => id === conversationId)?.[0] ?? senderId ?? "";
     if (dmUserId) {
       setDmUsers(prev => prev.map(user =>
         user.id === dmUserId ? { ...user, unread: user.unread + 1 } : user
@@ -472,7 +514,8 @@ export default function CommandCenter() {
         : channel
     ));
 
-    const dmUserId = Object.entries(directConversationIds).find(([, id]) => id === message.conversationId)?.[0];
+    const dmUserId = Object.entries(directConversationIds).find(([, id]) => id === message.conversationId)?.[0]
+      ?? (message.conversationId.startsWith("direct:") ? message.senderId ?? "" : "");
     if (dmUserId) {
       setDmUsers(prev => prev.map(user =>
         user.id === dmUserId ? { ...user, lastMessage: message.message } : user
@@ -517,17 +560,21 @@ export default function CommandCenter() {
         setChannels(nextChannels.length ? nextChannels : CHANNELS);
         setActiveChannel(prev => nextChannels.some(channel => channel.id === prev) ? prev : firstChannelId);
         setActiveConversationId(prev => prev && prev !== "channel:announcements" ? prev : firstChannelId);
-        setDmUsers(payload.users.map(user => ({
-          id: user.id,
-          name: user.name,
-          avatar: user.avatar,
-          avatarUrl: user.avatarUrl ?? null,
-          role: user.role,
-          status: user.status ?? "offline",
-          unread: user.unread ?? 0,
-          lastMessage: directLastMessages[user.id] ?? "No messages yet",
-          phone: user.phone,
-        })));
+        const presenceSnapshot = getChatPresenceSnapshot();
+        setDmUsers(payload.users.map(user => {
+          const cachedPresence = presenceSnapshot.get(user.id);
+          return {
+            id: user.id,
+            name: user.name,
+            avatar: user.avatar,
+            avatarUrl: user.avatarUrl ?? null,
+            role: user.role,
+            status: cachedPresence === undefined ? user.status ?? "offline" : cachedPresence ? "online" : "offline",
+            unread: user.unread ?? 0,
+            lastMessage: directLastMessages[user.id] ?? "No messages yet",
+            phone: user.phone,
+          };
+        }));
         setDirectConversationIds(directMap);
 
         const requested = requestedConversationId.current;
@@ -586,6 +633,7 @@ export default function CommandCenter() {
     const onPresence = (event: Event) => {
       const presence = (event as CustomEvent<{ userId?: string; online?: boolean }>).detail;
       if (!presence.userId) return;
+      recordChatPresence({ userId: presence.userId, online: Boolean(presence.online) });
       setDmUsers(prev => prev.map(user =>
         user.id === presence.userId
           ? { ...user, status: presence.online ? "online" : "offline" }
@@ -597,12 +645,19 @@ export default function CommandCenter() {
       const message = (event as CustomEvent<ChatMessage>).detail;
       setMessages(prev => upsertMessage(prev, message));
       updateConversationPreview(message);
+      if (message.conversationId?.startsWith("direct:") && message.senderId) {
+        setDirectConversationIds(prev =>
+          prev[message.senderId!] ? prev : { ...prev, [message.senderId!]: message.conversationId! }
+        );
+      }
 
       if (message.senderId === roleInfo.userId || !message.conversationId) return;
       if (message.conversationId === activeConversationId) {
         void markConversationRead(message.conversationId);
       } else {
-        incrementConversationUnread(message.conversationId);
+        if (message.id && countedUnreadMessageIds.current.has(message.id)) return;
+        if (message.id) countedUnreadMessageIds.current.add(message.id);
+        incrementConversationUnread(message.conversationId, message.senderId);
       }
     };
 
@@ -787,8 +842,6 @@ export default function CommandCenter() {
 
   const dismissApproval = (id: string) => setApprovals(prev => prev.filter(a => a.id !== id));
 
-  const totalUnread = channels.reduce((a, c) => a + c.unread, 0) + visibleDms.reduce((a, d) => a + d.unread, 0);
-
   const selectChannel = (id: string) => {
     setActiveChannel(id);
     setActiveDm(null);
@@ -839,12 +892,15 @@ export default function CommandCenter() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] min-h-[640px] gap-0 overflow-hidden bg-background">
+    <div ref={chatShellRef} className="flex h-[calc(100vh-6rem)] min-h-[640px] gap-0 overflow-hidden bg-background">
 
       {/* ══════════════════════════════════════════════════════════
           LEFT PANEL — WhatsApp-style conversation list
       ══════════════════════════════════════════════════════════ */}
-      <div className="w-[300px] shrink-0 flex flex-col border-r bg-background overflow-hidden">
+      <div
+        className="shrink-0 flex flex-col border-r bg-background overflow-hidden"
+        style={{ width: leftPanelWidth }}
+      >
 
         {/* Header */}
         <div className="px-4 py-3 border-b bg-background shrink-0">
@@ -860,9 +916,9 @@ export default function CommandCenter() {
                 <p className="text-[10px] text-muted-foreground">{connectionState}</p>
               </div>
             </div>
-            {totalUnread > 0 && (
+            {unreadCount > 0 && (
               <span className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[22px] text-center">
-                {totalUnread}
+                {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}
           </div>
@@ -1011,6 +1067,19 @@ export default function CommandCenter() {
             </AnimatePresence>
           </div>
         </ScrollArea>
+      </div>
+
+      <div
+        className="group relative z-10 w-2 shrink-0 cursor-col-resize bg-transparent"
+        onMouseDown={startLeftPanelResize}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize chat list"
+        aria-valuemin={LEFT_PANEL_MIN_WIDTH}
+        aria-valuemax={LEFT_PANEL_MAX_WIDTH}
+        aria-valuenow={Math.round(leftPanelWidth)}
+      >
+        <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-primary/70" />
       </div>
 
       {/* ══════════════════════════════════════════════════════════

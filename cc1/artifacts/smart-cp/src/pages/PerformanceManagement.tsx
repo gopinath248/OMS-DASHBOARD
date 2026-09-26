@@ -1,300 +1,277 @@
-import { useEffect, useState } from "react";
-import { TrendingUp, Star } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { BarChart3, CheckCircle2, Clock3, FolderKanban, ListTodo, TrendingUp } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { students, staff, performanceData } from "@/data/mockData";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { projects, staff, students, tasks, performanceData } from "@/data/mockData";
 
-function getUserId(name: string, id: string): string {
-  const firstName = name.split(" ")[0];
-  const num = id.slice(-3);
-  return `${firstName}CC${num}`;
+type PersonType = "Employee" | "Intern";
+type Person = {
+  id: string;
+  userId?: string;
+  name: string;
+  type: PersonType;
+  role: string;
+};
+
+function normalize(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
-function getRating(score: number): { label: string; stars: number; color: string } {
-  if (score >= 90) return { label: "Excellent", stars: 5, color: "text-green-600" };
-  if (score >= 80) return { label: "Good", stars: 4, color: "text-blue-600" };
-  if (score >= 70) return { label: "Average", stars: 3, color: "text-yellow-600" };
-  if (score >= 60) return { label: "Below Average", stars: 2, color: "text-orange-600" };
-  return { label: "Needs Improvement", stars: 1, color: "text-red-600" };
+function isCompleted(status: string) {
+  return ["completed", "complete", "done"].includes(normalize(status));
 }
 
-function employeePerformance(employee: typeof staff[number]) {
-  const base = employee.status === "Active" ? 88 : 76;
-  const leadBonus = ["manager", "manager", "manager"].includes(employee.role) ? 4 : 0;
-  const seniorBonus = employee.designation.includes("Lead") || employee.designation.includes("Senior") ? 3 : 0;
+function isInProgress(status: string) {
+  return ["in progress", "in-progress", "in_progress", "started"].includes(normalize(status));
+}
 
-  return {
-    internId: employee.id,
-    attendance: Math.min(98, base + seniorBonus),
-    taskCompletion: Math.min(96, base + leadBonus),
-    communication: Math.min(97, base + 5),
-    discipline: Math.min(99, base + 6),
-    learning: Math.min(95, base + 3),
-    innovation: Math.min(94, base + seniorBonus),
-    leadership: Math.min(98, base + leadBonus + seniorBonus),
-    collaboration: Math.min(97, base + 4),
-  };
+function formatPercent(value: number) {
+  return `${Math.round(value * 10) / 10}%`;
+}
+
+function taskBelongsToPerson(task: typeof tasks[number], person: Person) {
+  const assignedUserId = normalize(task.assignedToUserId);
+  const personUserId = normalize(person.userId);
+  if (assignedUserId && personUserId) return assignedUserId === personUserId;
+  return normalize(task.assignedTo) === normalize(person.name);
+}
+
+function projectBelongsToPerson(project: typeof projects[number], person: Person) {
+  return person.type === "Employee"
+    ? project.assignedStaff.includes(person.id)
+    : project.assignedInterns.includes(person.id);
+}
+
+function projectStatusIsCompleted(status: string) {
+  return normalize(status) === "completed";
 }
 
 export default function PerformanceManagement() {
-  const people = [
-    ...students.map(person => ({
-      ...person,
-      type: "Intern" as const,
-      roleLabel: person.role,
-      displayId: getUserId(person.name, person.id),
-    })),
+  const people = useMemo<Person[]>(() => [
     ...staff.map(person => ({
-      ...person,
-      role: "Employee",
-      type: "employee" as const,
-      roleLabel: "Employee",
-      displayId: person.id,
+      id: person.id,
+      userId: person.userId,
+      name: person.name,
+      type: "Employee" as const,
+      role: person.designation || person.role,
     })),
-  ];
-  const [selectedStudent, setSelectedStudent] = useState<string>(() => people[0]?.id ?? "");
+    ...students.map(person => ({
+      id: person.id,
+      userId: person.userId,
+      name: person.name,
+      type: "Intern" as const,
+      role: person.role,
+    })),
+  ], []);
+  const [selectedPersonId, setSelectedPersonId] = useState(() => people[0]?.id ?? "");
+  const [groupFilter, setGroupFilter] = useState<"all" | PersonType>("all");
+
+  const visiblePeople = useMemo(
+    () => groupFilter === "all" ? people : people.filter(person => person.type === groupFilter),
+    [groupFilter, people],
+  );
 
   useEffect(() => {
-    if (!people.length) {
-      setSelectedStudent("");
-      return;
+    if (!visiblePeople.some(person => person.id === selectedPersonId)) {
+      setSelectedPersonId(visiblePeople[0]?.id ?? "");
     }
+  }, [selectedPersonId, visiblePeople]);
 
-    if (!people.some(person => person.id === selectedStudent)) {
-      setSelectedStudent(people[0].id);
-    }
-  }, [people, selectedStudent]);
+  const selectedPerson = people.find(person => person.id === selectedPersonId);
+  const selectedTasks = selectedPerson ? tasks.filter(task => taskBelongsToPerson(task, selectedPerson)) : [];
+  const selectedProjects = selectedPerson ? projects.filter(project => projectBelongsToPerson(project, selectedPerson)) : [];
+  const completedTasks = selectedTasks.filter(task => isCompleted(task.status)).length;
+  const inProgressTasks = selectedTasks.filter(task => isInProgress(task.status)).length;
+  const pendingTasks = selectedTasks.length - completedTasks - inProgressTasks;
+  const overdueTasks = selectedTasks.filter(task =>
+    Boolean(task.dueDate) && !isCompleted(task.status) && new Date(task.dueDate).getTime() < Date.now()
+  ).length;
+  const completedProjects = selectedProjects.filter(project => projectStatusIsCompleted(project.status)).length;
+  const taskCompletionRate = selectedTasks.length ? (completedTasks / selectedTasks.length) * 100 : null;
+  const projectCompletionRate = selectedProjects.length ? (completedProjects / selectedProjects.length) * 100 : null;
+  const storedPerformance = selectedPerson?.type === "Intern"
+    ? performanceData.find(item => item.internId === selectedPerson.id)
+    : undefined;
+  const storedMetrics = storedPerformance
+    ? [
+        ["Attendance", storedPerformance.attendance],
+        ["Communication", storedPerformance.communication],
+        ["Discipline", storedPerformance.discipline],
+        ["Learning", storedPerformance.learning],
+        ["Innovation", storedPerformance.innovation],
+        ["Leadership", storedPerformance.leadership],
+        ["Collaboration", storedPerformance.collaboration],
+      ].filter(([, value]) => Number(value) > 0)
+    : [];
 
-  const student = people.find(s => s.id === selectedStudent);
-  const perfData = student?.type === "employee"
-    ? employeePerformance(student)
-    : performanceData.find(p => p.internId === selectedStudent);
+  const summary = useMemo(() => {
+    const allTasks = groupFilter === "all"
+      ? tasks
+      : tasks.filter(task => visiblePeople.some(person => taskBelongsToPerson(task, person)));
+    const completed = allTasks.filter(task => isCompleted(task.status)).length;
+    const inProgress = allTasks.filter(task => isInProgress(task.status)).length;
+    return {
+      total: allTasks.length,
+      completed,
+      inProgress,
+      pending: allTasks.length - completed - inProgress,
+      completionRate: allTasks.length ? (completed / allTasks.length) * 100 : null,
+    };
+  }, [groupFilter, visiblePeople]);
 
-  const metrics = perfData ? [
-    { subject: "Attendance", A: perfData.attendance },
-    { subject: "Task Completion", A: perfData.taskCompletion },
-    { subject: "Communication", A: perfData.communication },
-    { subject: "Discipline", A: perfData.discipline },
-    { subject: "Learning", A: perfData.learning },
-    { subject: "Innovation", A: perfData.innovation },
-    { subject: "Leadership", A: perfData.leadership },
-    { subject: "Collaboration", A: perfData.collaboration },
-  ] : [];
-
-  const overallScore = perfData
-    ? Math.round(
-        (perfData.attendance + perfData.taskCompletion + perfData.communication +
-         perfData.discipline + perfData.learning + perfData.innovation +
-         perfData.leadership + perfData.collaboration) / 8
-      )
-    : 0;
-
-  const rating = getRating(overallScore);
-
-  const trendData = [
-    { month: "Jan", score: Math.max(50, overallScore - 12) },
-    { month: "Feb", score: Math.max(55, overallScore - 8) },
-    { month: "Mar", score: Math.max(60, overallScore - 10) },
-    { month: "Apr", score: Math.max(65, overallScore - 5) },
-    { month: "May", score: Math.max(70, overallScore - 2) },
-    { month: "Jun", score: overallScore },
+  const chartData = [
+    { name: "Completed", count: completedTasks },
+    { name: "In progress", count: inProgressTasks },
+    { name: "Pending", count: pendingTasks },
+    { name: "Overdue", count: overdueTasks },
   ];
-
-  const METRIC_LABELS: Record<string, string> = {
-    attendance: "Attendance",
-    taskCompletion: "Task Completion",
-    communication: "Communication",
-    discipline: "Discipline",
-    learning: "Learning",
-    innovation: "Innovation",
-    leadership: "Leadership",
-    collaboration: "Collaboration",
-  };
+  const summaryCards: Array<{ label: string; value: string | number; icon: React.ElementType }> = [
+    { label: "People", value: visiblePeople.length, icon: BarChart3 },
+    { label: "Tasks", value: summary.total, icon: ListTodo },
+    { label: "Completed", value: summary.completed, icon: CheckCircle2 },
+    { label: "In progress", value: summary.inProgress, icon: Clock3 },
+    { label: "Completion rate", value: summary.completionRate === null ? "—" : formatPercent(summary.completionRate), icon: TrendingUp },
+  ];
 
   return (
     <div className="space-y-6 pb-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Performance Management</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Analytics calculated from stored tasks, projects, and performance records.</p>
         </div>
-        <div className="w-full sm:w-[320px]">
-          <Select value={selectedStudent} onValueChange={setSelectedStudent} disabled={!people.length}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select person" />
-            </SelectTrigger>
-            <SelectContent position="item-aligned" className="max-h-72 overflow-y-auto">
-              {people.map(s => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name} — {s.role}
-                </SelectItem>
+        <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+          <Select value={groupFilter} onValueChange={value => setGroupFilter(value as "all" | PersonType)}>
+            <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Group" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All people</SelectItem>
+              <SelectItem value="Employee">Employees</SelectItem>
+              <SelectItem value="Intern">Interns</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={selectedPersonId} onValueChange={setSelectedPersonId} disabled={!visiblePeople.length}>
+            <SelectTrigger className="w-full sm:w-[260px]"><SelectValue placeholder="Select person" /></SelectTrigger>
+            <SelectContent className="max-h-72">
+              {visiblePeople.map(person => (
+                <SelectItem key={person.id} value={person.id}>{person.name} — {person.type}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {student && perfData ? (
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        {summaryCards.map(({ label, value, icon: Icon }) => (
+          <Card key={label}>
+            <CardContent className="p-4">
+              <Icon size={17} className="mb-3 text-primary" />
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="mt-1 text-2xl font-bold">{value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {!selectedPerson ? (
+        <div className="rounded-xl border py-20 text-center text-muted-foreground">
+          <TrendingUp className="mx-auto mb-4 h-12 w-12 opacity-20" />
+          <p>{people.length ? "No people match the selected filter." : "No performance data available yet."}</p>
+        </div>
+      ) : (
         <>
-          {/* Intern Info Card */}
-          <div className="bg-card border rounded-xl p-5 shadow-sm">
-            <div className="grid grid-cols-1 md:grid-cols-[minmax(240px,1.4fr)_repeat(5,minmax(110px,1fr))] gap-4 items-center">
-            <div className="flex items-center gap-4 min-w-0">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-lg">
-                {student.name.split(" ").map(n => n[0]).join("").substring(0,2)}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>{selectedPerson.name}</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">{selectedPerson.role} · {selectedPerson.type} · {selectedPerson.id}</p>
               </div>
-              <div className="min-w-0">
-                <p className="font-bold text-lg leading-tight">{student.name}</p>
-                <p className="text-xs text-muted-foreground font-mono">{student.displayId}</p>
-              </div>
-            </div>
-              <div className="rounded-lg bg-muted/30 px-3 py-2">
-                <p className="text-xs text-muted-foreground">Role</p>
-                <p className="font-semibold">{student.roleLabel}</p>
-              </div>
-              <div className="rounded-lg bg-muted/30 px-3 py-2">
-                <p className="text-xs text-muted-foreground">Rating</p>
-                <p className={`font-semibold ${rating.color}`}>{rating.label}</p>
-              </div>
-              <div className="rounded-lg bg-muted/30 px-3 py-2">
-                <p className="text-xs text-muted-foreground">Attendance</p>
-                <p className="font-semibold">{perfData.attendance}%</p>
-              </div>
-              <div className="rounded-lg bg-muted/30 px-3 py-2">
-                <p className="text-xs text-muted-foreground">Task Completion</p>
-                <p className="font-semibold">{perfData.taskCompletion}%</p>
-              </div>
-              <div className="rounded-lg bg-primary/5 px-3 py-2">
-                <p className="text-xs text-muted-foreground">Performance Score</p>
-                <p className="font-semibold text-primary">{overallScore}%</p>
-              </div>
-            </div>
+              <Badge variant="outline">{selectedTasks.length ? "Task data available" : "No task data available yet"}</Badge>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-7">
+              {[
+                ["Assigned tasks", selectedTasks.length],
+                ["Completed", completedTasks],
+                ["In progress", inProgressTasks],
+                ["Pending", pendingTasks],
+                ["Overdue", overdueTasks],
+                ["Assigned projects", selectedProjects.length],
+                ["Completed projects", completedProjects],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-lg bg-muted/30 px-3 py-2">
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="mt-1 font-semibold">{value}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle>Task performance</CardTitle></CardHeader>
+              <CardContent>
+                {selectedTasks.length ? (
+                  <>
+                    <div className="mb-4 flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Task completion rate</span>
+                      <span className="font-semibold">{formatPercent(taskCompletionRate ?? 0)}</span>
+                    </div>
+                    <div className="h-[280px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                          <YAxis allowDecimals={false} />
+                          <Tooltip />
+                          <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                ) : <p className="py-20 text-center text-sm text-muted-foreground">No performance data available yet.</p>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle>Project performance</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {selectedProjects.length ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Completion rate</p><p className="mt-1 font-semibold">{formatPercent(projectCompletionRate ?? 0)}</p></div>
+                      <div className="rounded-lg bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Active/planning</p><p className="mt-1 font-semibold">{selectedProjects.length - completedProjects}</p></div>
+                    </div>
+                    <div className="space-y-2">
+                      {selectedProjects.map(project => (
+                        <div key={project.id} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+                          <span className="flex min-w-0 items-center gap-2"><FolderKanban size={14} className="shrink-0 text-primary" /><span className="truncate">{project.name}</span></span>
+                          <Badge variant="outline">{project.status}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : <p className="py-20 text-center text-sm text-muted-foreground">No project data available yet.</p>}
+              </CardContent>
+            </Card>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="md:col-span-1 bg-primary text-primary-foreground border-transparent shadow-md">
-              <CardContent className="pt-6 text-center pb-6">
-                <h3 className="text-sm font-medium opacity-80 mb-1">Overall Rating</h3>
-                <p className="text-xs opacity-60 mb-3">{student.name}</p>
-                <div className="text-6xl font-bold mb-3">
-                  {overallScore}<span className="text-3xl">%</span>
-                </div>
-                <div className="flex justify-center gap-1 mb-3">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      fill="currentColor"
-                      size={22}
-                      className={i < rating.stars ? "text-yellow-400" : "text-yellow-400/30"}
-                    />
+          <Card>
+            <CardHeader><CardTitle>Existing performance metrics</CardTitle></CardHeader>
+            <CardContent>
+              {storedMetrics.length ? (
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  {storedMetrics.map(([label, value]) => (
+                    <div key={String(label)} className="rounded-lg bg-muted/30 p-3">
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p className="mt-1 font-semibold">{value}%</p>
+                    </div>
                   ))}
                 </div>
-                <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/25 mb-4">
-                  {rating.label}
-                </Badge>
-                <p className="text-xs opacity-75 leading-relaxed">
-                  {overallScore >= 90
-                    ? "Excellent performance, exceeding expectations in most areas."
-                    : overallScore >= 80
-                    ? "Good overall performance with room for improvement."
-                    : overallScore >= 70
-                    ? "Meets expectations. Consistent effort needed in key areas."
-                    : "Below expectations. Immediate improvement plan recommended."}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle>Score Breakdown</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
-                  {Object.entries(perfData)
-                    .filter(([k]) => k !== "internId")
-                    .map(([key, value]) => {
-                      const score = value as number;
-                      const color = score >= 90 ? "bg-green-500" : score >= 75 ? "bg-blue-500" : score >= 60 ? "bg-yellow-500" : "bg-red-500";
-                      return (
-                        <div key={key}>
-                          <div className="flex justify-between text-sm mb-1.5">
-                            <span className="text-muted-foreground capitalize">{METRIC_LABELS[key] ?? key}</span>
-                            <span className="font-semibold text-foreground">{score}%</span>
-                          </div>
-                          <div className="h-2 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${color}`}
-                              style={{ width: `${score}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Competency Radar</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[350px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="75%" data={metrics}>
-                      <PolarGrid stroke="hsl(var(--border))" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                      <Radar
-                        name={student.name}
-                        dataKey="A"
-                        stroke="hsl(var(--primary))"
-                        fill="hsl(var(--primary))"
-                        fillOpacity={0.4}
-                        strokeWidth={2}
-                      />
-                      <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderRadius: "8px", border: "1px solid hsl(var(--border))" }} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Performance Trend (Estimated)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[350px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendData} margin={{ top: 20, right: 20, bottom: 20, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" domain={[40, 100]} tickLine={false} axisLine={false} />
-                      <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderRadius: "8px", border: "1px solid hsl(var(--border))" }} />
-                      <Line
-                        type="monotone"
-                        dataKey="score"
-                        stroke="hsl(var(--primary))"
-                        strokeWidth={3}
-                        dot={{ r: 4, fill: "hsl(var(--primary))" }}
-                        activeDot={{ r: 6 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              ) : <p className="text-sm text-muted-foreground">No stored evaluation metrics are available for this person.</p>}
+            </CardContent>
+          </Card>
         </>
-      ) : (
-        <div className="text-center py-20 text-muted-foreground">
-          <TrendingUp className="mx-auto h-12 w-12 opacity-20 mb-4" />
-          <p>{people.length ? "No performance data available for the selected person." : "No employee or intern records are available yet."}</p>
-        </div>
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AUTH_SESSION_CHANGED_EVENT, getAuthSession, type AuthRole } from "@/lib/auth";
 import { clearAppData, replaceAppData } from "@/data/mockData";
+import { recordChatPresence } from "@/lib/chatPresence";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/AdminDashboard";
 import StudentManagement from "@/pages/StudentManagement";
@@ -149,7 +150,7 @@ function Router({ appDataState, chatUnreadCount }: { appDataState: AppDataState;
       <Route path="/planway/:tab">{guarded(ADMIN_ONLY, <PlanWay />)}</Route>
       <Route path="/planway">{guarded(ADMIN_ONLY, <PlanWay />)}</Route>
       <Route path="/salary">{guarded(ADMIN_ONLY, <SalaryManagement />)}</Route>
-      <Route path="/commands">{guarded(ALL_ROLES, <Commands />, true)}</Route>
+      <Route path="/commands">{guarded(ALL_ROLES, <Commands unreadCount={chatUnreadCount} />, true)}</Route>
 
       <Route>{guarded(ALL_ROLES, <NotFound />)}</Route>
     </Switch>
@@ -312,9 +313,15 @@ function App() {
     source.addEventListener("leave_request_approved", refreshAppData);
     source.addEventListener("leave_request_rejected", refreshAppData);
     source.addEventListener("notification_created", refreshAppData);
+    source.addEventListener("notification_deleted", refreshAppData);
+    source.addEventListener("task_created", refreshAppData);
+    source.addEventListener("task_updated", refreshAppData);
+    source.addEventListener("project_created", refreshAppData);
+    source.addEventListener("project_assigned", refreshAppData);
     source.addEventListener("presence", (event) => {
       const presence = JSON.parse((event as MessageEvent).data) as { userId?: string; online?: boolean };
       if (!presence.userId) return;
+      recordChatPresence({ userId: presence.userId, online: Boolean(presence.online) });
       window.dispatchEvent(new CustomEvent("chat:presence", { detail: presence }));
     });
     source.addEventListener("message", (event) => {
