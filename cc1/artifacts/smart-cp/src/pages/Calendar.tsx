@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { events as initialMockEvents, students, staff } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { getAuthSession } from "@/lib/auth";
 
 type CalendarEvent = {
   id: string; date: string; title: string; type: string;
@@ -219,8 +220,8 @@ function AddEventDialog({ open, onClose, onSave, editingEvent, prefilledDate }: 
 }
 
 // ── Event Detail Dialog ────────────────────────────────────────────────────
-function EventDetailDialog({ event, open, onClose, onEdit, onDelete }: {
-  event: CalendarEvent | null; open: boolean; onClose: () => void; onEdit: () => void; onDelete: () => void;
+function EventDetailDialog({ event, open, onClose, onEdit, onDelete, canModify }: {
+  event: CalendarEvent | null; open: boolean; onClose: () => void; onEdit: () => void; onDelete: () => void; canModify: boolean;
 }) {
   if (!event) return null;
   return (
@@ -272,9 +273,13 @@ function EventDetailDialog({ event, open, onClose, onEdit, onDelete }: {
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10" onClick={onDelete}><Trash2 size={13} /> Delete</Button>
           {event.meetingLink && <Button variant="outline" size="sm" onClick={() => window.open(event.meetingLink, "_blank", "noopener,noreferrer")}>Join</Button>}
-          <Button size="sm" className="gap-1.5" onClick={onEdit}><Edit2 size={13} /> Edit</Button>
+          {canModify && (
+            <>
+              <Button variant="outline" size="sm" className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10" onClick={onDelete}><Trash2 size={13} /> Delete</Button>
+              <Button size="sm" className="gap-1.5" onClick={onEdit}><Edit2 size={13} /> Edit</Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -391,6 +396,7 @@ function AgendaView({ events, onEventClick }: { events: CalendarEvent[]; onEvent
 // ── Main Calendar Page ────────────────────────────────────────────────────
 export default function CalendarPage() {
   const { toast } = useToast();
+  const canModifyCalendar = getAuthSession()?.user.role !== "INTERN";
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [calEvents, setCalEvents] = useState<CalendarEvent[]>(
@@ -428,6 +434,7 @@ export default function CalendarPage() {
   };
 
   const handleSaveEvent = (form: EventForm) => {
+    if (!canModifyCalendar) return;
     if (editingEvent) {
       setCalEvents(prev => prev.map(e => e.id === editingEvent.id ? { ...e, ...form } : e));
       toast({ title: "Event updated", description: `"${form.title}" has been updated.` });
@@ -439,6 +446,7 @@ export default function CalendarPage() {
   };
 
   const handleDeleteEvent = () => {
+    if (!canModifyCalendar) return;
     if (!selectedEvent) return;
     setCalEvents(prev => prev.filter(e => e.id !== selectedEvent.id));
     toast({ title: "Event deleted", description: `"${selectedEvent.title}" removed.`, variant: "destructive" });
@@ -449,6 +457,7 @@ export default function CalendarPage() {
   const handleEventClick = (evt: CalendarEvent) => { setSelectedEvent(evt); setShowDetailDialog(true); };
 
   const handleDayClick = (day: number) => {
+    if (!canModifyCalendar) return;
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     setEditingEvent(null);
     setPrefilledDate(dateStr);
@@ -472,9 +481,11 @@ export default function CalendarPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2"><CalendarDays size={26} className="text-primary" /> Calendar</h1>
         </div>
-        <Button className="gap-2" onClick={() => { setEditingEvent(null); setShowAddDialog(true); }}>
-          <Plus size={16} /> Add New Meeting
-        </Button>
+        {canModifyCalendar && (
+          <Button className="gap-2" onClick={() => { setEditingEvent(null); setShowAddDialog(true); }}>
+            <Plus size={16} /> Add New Meeting
+          </Button>
+        )}
       </div>
 
       {/* Toolbar */}
@@ -536,7 +547,7 @@ export default function CalendarPage() {
                   const dayEvents = getEventsForDay(day);
                   const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
                   return (
-                    <div key={day} className={cn("border-r border-b p-1.5 transition-colors hover:bg-muted/10 group cursor-pointer", isToday && "bg-primary/5")} onClick={() => handleDayClick(day)}>
+                    <div key={day} className={cn("border-r border-b p-1.5 transition-colors hover:bg-muted/10 group", canModifyCalendar && "cursor-pointer", isToday && "bg-primary/5")} onClick={() => handleDayClick(day)}>
                       <div className={cn("text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full mb-1", isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")}>
                         {day}
                       </div>
@@ -615,10 +626,16 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <AddEventDialog open={showAddDialog} onClose={() => { setShowAddDialog(false); setEditingEvent(null); setPrefilledDate(""); }} onSave={handleSaveEvent} editingEvent={editingEvent} prefilledDate={prefilledDate} />
+      {canModifyCalendar && (
+        <AddEventDialog open={showAddDialog} onClose={() => { setShowAddDialog(false); setEditingEvent(null); setPrefilledDate(""); }} onSave={handleSaveEvent} editingEvent={editingEvent} prefilledDate={prefilledDate} />
+      )}
       <EventDetailDialog event={selectedEvent} open={showDetailDialog} onClose={() => setShowDetailDialog(false)}
-        onEdit={() => { setShowDetailDialog(false); setEditingEvent(selectedEvent); setShowAddDialog(true); }}
+        onEdit={() => {
+          if (!canModifyCalendar) return;
+          setShowDetailDialog(false); setEditingEvent(selectedEvent); setShowAddDialog(true);
+        }}
         onDelete={handleDeleteEvent}
+        canModify={canModifyCalendar}
       />
     </div>
   );

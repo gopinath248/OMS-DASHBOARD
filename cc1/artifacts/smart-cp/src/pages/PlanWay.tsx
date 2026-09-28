@@ -248,7 +248,6 @@ function SummaryTab({ sprint }: { sprint: Sprint }) {
               <p className="text-sm text-muted-foreground mb-1 flex items-center gap-1.5">
                 <CalendarDays size={13} /> {sprint.duration}
               </p>
-              <p className="text-sm text-muted-foreground/80 italic leading-relaxed">Goal: {sprint.goal}</p>
             </div>
             <div className="flex gap-6 text-center shrink-0">
               <div><p className="text-2xl font-bold text-primary">{sprint.velocity}</p><p className="text-xs text-muted-foreground">Velocity</p></div>
@@ -972,7 +971,6 @@ export default function PlanWay() {
             <span style={{ color: "#D4AF37" }}>PLANYWAY</span>
             <span className="text-muted-foreground font-normal text-lg ml-2">/ Sprint Planning</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Jira-style sprint management workspace · Corecode Global</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className={cn("px-3 py-1 font-semibold text-xs", STATUS_BADGE[sprint.status])}>{sprint.status} Sprint</Badge>

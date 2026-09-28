@@ -629,8 +629,19 @@ export default function TaskManagement() {
     fromColumn: string;
     toColumn: string;
     assignee: string;
-  }>({ open: false, task: null, fromColumn: "", toColumn: "", assignee: "" });
+    reason: string;
+    error: string;
+  }>({ open: false, task: null, fromColumn: "", toColumn: "", assignee: "", reason: "", error: "" });
   const [isAssigningDraggedTask, setIsAssigningDraggedTask] = useState(false);
+  const [moveReasonDialog, setMoveReasonDialog] = useState<{
+    open: boolean;
+    task: Task | null;
+    fromColumn: string;
+    toColumn: string;
+    reason: string;
+    error: string;
+  }>({ open: false, task: null, fromColumn: "", toColumn: "", reason: "", error: "" });
+  const [isSavingMoveReason, setIsSavingMoveReason] = useState(false);
 
   const [taskList, setTaskList] = useState<Task[]>(buildTaskList);
 
@@ -739,7 +750,7 @@ export default function TaskManagement() {
         }
         break;
       case "Archive":
-        void saveMove(taskId, "Done");
+        requestMove(taskId, "Done");
         break;
       case "Delete":
         setTaskList(prev => prev.filter(t => t.id !== taskId));
@@ -817,13 +828,54 @@ export default function TaskManagement() {
       toast({ title: "Assignment failed", description: error instanceof Error ? error.message : "Unable to assign ticket.", variant: "destructive" });
     }
   };
-  const saveMove = async (id: string, column: string) => {
-    try {
-      await persistTaskUpdate(id, { column, status: column });
-      toast({ title: "Ticket moved", description: `Moved to ${column}` });
-    } catch (error) {
-      toast({ title: "Move failed", description: error instanceof Error ? error.message : "Unable to move ticket.", variant: "destructive" });
+  const requestMove = (id: string, column: string) => {
+    const task = taskList.find(item => item.id === id);
+    if (!task) return;
+
+    const currentColumn = isIntern ? getInternBoardColumn(task.column) : task.column ?? "To Do";
+    if (currentColumn === column) return;
+
+    setMoveReasonDialog({
+      open: true,
+      task,
+      fromColumn: currentColumn,
+      toColumn: column,
+      reason: "",
+      error: "",
+    });
+  };
+
+  const confirmMoveWithReason = async () => {
+    if (!moveReasonDialog.task) return;
+    const reason = moveReasonDialog.reason.trim();
+    if (!reason) {
+      setMoveReasonDialog(current => ({ ...current, error: "Reason is required." }));
+      return;
     }
+
+    setIsSavingMoveReason(true);
+    try {
+      await persistTaskUpdate(
+        moveReasonDialog.task.id,
+        { column: moveReasonDialog.toColumn, status: moveReasonDialog.toColumn },
+        { changeReason: reason },
+      );
+      toast({ title: "Ticket moved", description: `Moved to ${moveReasonDialog.toColumn}` });
+      setMoveReasonDialog({ open: false, task: null, fromColumn: "", toColumn: "", reason: "", error: "" });
+    } catch (error) {
+      toast({
+        title: "Unable to move task.",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingMoveReason(false);
+    }
+  };
+
+  const closeMoveReasonDialog = () => {
+    if (isSavingMoveReason) return;
+    setMoveReasonDialog({ open: false, task: null, fromColumn: "", toColumn: "", reason: "", error: "" });
   };
   const savePriority = async (id: string, priority: string) => {
     try {
@@ -880,20 +932,28 @@ export default function TaskManagement() {
         fromColumn: currentColumn,
         toColumn: columnId,
         assignee: existingAssignee?.userId ?? existingAssignee?.name ?? "",
+        reason: "",
+        error: "",
       });
       return;
     }
 
-    void saveMove(taskId, columnId);
+    requestMove(taskId, columnId);
   };
 
   const closeDragAssignDialog = () => {
     if (isAssigningDraggedTask) return;
-    setDragAssignDialog({ open: false, task: null, fromColumn: "", toColumn: "", assignee: "" });
+    setDragAssignDialog({ open: false, task: null, fromColumn: "", toColumn: "", assignee: "", reason: "", error: "" });
   };
 
   const confirmDraggedAssignment = async () => {
     if (!dragAssignDialog.task || !dragAssignDialog.assignee) return;
+    const reason = dragAssignDialog.reason.trim();
+    if (!reason) {
+      setDragAssignDialog(current => ({ ...current, error: "Reason is required." }));
+      return;
+    }
+
     setIsAssigningDraggedTask(true);
     try {
       const updated = await persistTaskUpdate(
@@ -903,17 +963,17 @@ export default function TaskManagement() {
           column: dragAssignDialog.toColumn,
           status: dragAssignDialog.toColumn,
         },
-        { notifyAssignment: true },
+        { notifyAssignment: true, changeReason: reason },
       );
-      setDragAssignDialog({ open: false, task: null, fromColumn: "", toColumn: "", assignee: "" });
+      setDragAssignDialog({ open: false, task: null, fromColumn: "", toColumn: "", assignee: "", reason: "", error: "" });
       toast({
         title: "Work assigned",
         description: `"${updated.title}" moved to ${updated.status}.`,
       });
     } catch (error) {
       toast({
-        title: "Assignment failed",
-        description: error instanceof Error ? error.message : "Unable to assign dragged task.",
+        title: "Unable to move task.",
+        description: error instanceof Error ? error.message : "Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -1128,7 +1188,7 @@ export default function TaskManagement() {
                         </span>
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        <Select value={isIntern ? getInternBoardColumn(task.column) : task.column ?? "To Do"} onValueChange={v => saveMove(task.id, v)}>
+                        <Select value={isIntern ? getInternBoardColumn(task.column) : task.column ?? "To Do"} onValueChange={v => requestMove(task.id, v)}>
                           <SelectTrigger className="h-6 text-[10px] w-28"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {visibleColumns.map(c => <SelectItem key={c.id} value={c.id} className="text-xs">{c.label}</SelectItem>)}
@@ -1158,11 +1218,56 @@ export default function TaskManagement() {
       )}
 
       {/* ── Create Ticket Dialog ──────────────────────── */}
+      <Dialog open={moveReasonDialog.open} onOpenChange={(open) => { if (!open) closeMoveReasonDialog(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Reason for Change</DialogTitle></DialogHeader>
+          {moveReasonDialog.task && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">Please provide a reason for moving this task.</p>
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase text-muted-foreground">Task</p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {ticketId(moveReasonDialog.task.id, moveReasonDialog.task.ticketType ?? "Task")}
+                </p>
+                <p className="text-sm font-semibold leading-snug">{moveReasonDialog.task.title}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg border p-3">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground">From</p>
+                  <p className="font-medium">{moveReasonDialog.fromColumn}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground">To</p>
+                  <p className="font-medium">{moveReasonDialog.toColumn}</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Reason <span className="text-destructive">*</span></Label>
+                <Textarea
+                  rows={4}
+                  placeholder="Enter the reason for this change..."
+                  value={moveReasonDialog.reason}
+                  onChange={event => setMoveReasonDialog(current => ({ ...current, reason: event.target.value, error: "" }))}
+                />
+                {moveReasonDialog.error && <p className="text-xs text-destructive">{moveReasonDialog.error}</p>}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={closeMoveReasonDialog} disabled={isSavingMoveReason}>Cancel</Button>
+            <Button onClick={confirmMoveWithReason} disabled={isSavingMoveReason}>
+              {isSavingMoveReason ? "Saving..." : "Confirm Change"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={dragAssignDialog.open} onOpenChange={(open) => { if (!open) closeDragAssignDialog(); }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Assign Work</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Reason for Change</DialogTitle></DialogHeader>
           {dragAssignDialog.task && (
             <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">Please provide a reason for moving this task.</p>
               <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
                 <p className="text-[10px] font-semibold uppercase text-muted-foreground">Task</p>
                 <p className="font-mono text-xs text-muted-foreground">
@@ -1214,6 +1319,17 @@ export default function TaskManagement() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-1.5">
+                <Label>Reason <span className="text-destructive">*</span></Label>
+                <Textarea
+                  rows={4}
+                  placeholder="Enter the reason for this change..."
+                  value={dragAssignDialog.reason}
+                  onChange={event => setDragAssignDialog(current => ({ ...current, reason: event.target.value, error: "" }))}
+                />
+                {dragAssignDialog.error && <p className="text-xs text-destructive">{dragAssignDialog.error}</p>}
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -1222,7 +1338,7 @@ export default function TaskManagement() {
               onClick={confirmDraggedAssignment}
               disabled={isAssigningDraggedTask || !dragAssignDialog.assignee}
             >
-              {isAssigningDraggedTask ? "Assigning..." : "Assign"}
+              {isAssigningDraggedTask ? "Saving..." : "Confirm Change"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1301,7 +1417,7 @@ export default function TaskManagement() {
       <MoveDialog
         task={moveDialog.task} open={moveDialog.open}
         onClose={() => setMoveDialog({ open: false, task: null })}
-        onSave={col => { if (moveDialog.task) void saveMove(moveDialog.task.id, col); }}
+        onSave={col => { if (moveDialog.task) requestMove(moveDialog.task.id, col); }}
       />
       <ViewDetailsDialog
         task={viewDialog.task} open={viewDialog.open}

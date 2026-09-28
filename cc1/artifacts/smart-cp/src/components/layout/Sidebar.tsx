@@ -58,7 +58,7 @@ const STUDENT_LINKS = [
   { href: "/projects",          label: "My Projects",    icon: FolderOpen },
   { href: "/tasks",             label: "My Tasks",       icon: ClipboardCheck },
   { href: "/apply-leave",       label: "Apply Leave",    icon: CalendarDays },
-  { href: "/calendar",          label: "Calendar",       icon: Calendar },
+  { href: "/intern/calendar",   label: "Calendar",       icon: Calendar },
   { href: "/notifications",     label: "Notifications",  icon: Bell },
   { href: "/commands",          label: "Chat Center",    icon: MessageSquare },
   { href: "/settings",          label: "Settings",       icon: Settings },

@@ -351,7 +351,6 @@ function StudentProjectsView({ allProjects, internId }: { allProjects: Project[]
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">My Project Repository</h1>
-        <p className="text-muted-foreground mt-1">Your projects, plans, and milestones in one place.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -377,7 +376,6 @@ function StudentProjectsView({ allProjects, internId }: { allProjects: Project[]
         {myActiveProjects.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground bg-muted/20 rounded-xl border border-dashed">
             <FolderOpen size={40} className="mb-3 opacity-30" />
-            <p className="font-medium">No active projects assigned to you yet.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">

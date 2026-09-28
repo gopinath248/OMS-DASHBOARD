@@ -140,7 +140,6 @@ export default function PerformanceManagement() {
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Performance Management</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Analytics calculated from stored tasks, projects, and performance records.</p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
           <Select value={groupFilter} onValueChange={value => setGroupFilter(value as "all" | PersonType)}>

@@ -140,6 +140,7 @@ function Router({ appDataState, chatUnreadCount }: { appDataState: AppDataState;
       <Route path="/reports">{guarded(ADMIN_ONLY, <Reports />)}</Route>
 
       <Route path="/calendar">{guarded(ALL_ROLES, <Calendar />)}</Route>
+      <Route path="/intern/calendar">{guarded(INTERN_ONLY, <Calendar />)}</Route>
       <Route path="/notifications">{guarded(ALL_ROLES, <Notifications />)}</Route>
       <Route path="/settings">{guarded(ALL_ROLES, <Settings />)}</Route>
       <Route path="/help">{guarded(ALL_ROLES, <HelpCenter />)}</Route>

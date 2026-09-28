@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { apiJson } from "@/lib/api";
@@ -112,7 +112,6 @@ export default function ApplyLeave() {
       <div className="max-w-2xl mx-auto space-y-6 pb-10">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Apply for Leave</h1>
-          <p className="text-muted-foreground mt-1">Submit a new leave request to your manager.</p>
         </div>
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-10 pb-10 flex flex-col items-center text-center space-y-4">
@@ -146,7 +145,6 @@ export default function ApplyLeave() {
     <div className="max-w-2xl mx-auto space-y-6 pb-10">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Apply for Leave</h1>
-        <p className="text-muted-foreground mt-1">Submit a new leave request to your manager.</p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -166,7 +164,6 @@ export default function ApplyLeave() {
         <form onSubmit={handleSubmit} noValidate>
           <CardHeader>
             <CardTitle>Leave Application Form</CardTitle>
-            <CardDescription>All fields marked with * are required.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-1.5">

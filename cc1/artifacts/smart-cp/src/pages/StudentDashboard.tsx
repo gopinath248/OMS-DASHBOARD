@@ -44,7 +44,6 @@ export default function StudentDashboard() {
       <div className="space-y-6 pb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Intern Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Loading your internship data...</p>
         </div>
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
@@ -59,7 +58,6 @@ export default function StudentDashboard() {
     <div className="space-y-6 pb-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Intern Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Welcome back, {currentName.split(" ")[0]}! Here is your internship progress.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

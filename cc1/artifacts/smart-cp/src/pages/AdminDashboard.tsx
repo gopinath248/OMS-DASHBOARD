@@ -330,9 +330,6 @@ export default function AdminDashboard() {
       <div className="flex justify-between items-start flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            CODE CORE PLANYWAY - {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" onClick={handleGenerateAdminReport} className="gap-2">

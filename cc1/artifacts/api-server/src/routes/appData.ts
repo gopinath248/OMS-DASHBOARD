@@ -89,10 +89,10 @@ router.get("/app-data", requireAuth, async (req, res): Promise<void> => {
         ORDER BY t.trainee_code
       `),
       rows(`
-        SELECT id, name, description, status, created_by, created_at, updated_at
-        FROM projects
+        SELECT p.id, p.name, p.description, p.status, p.created_by, p.created_at, p.updated_at
+        FROM projects p
         ${projectVisibilityJoin}
-        ORDER BY id
+        ORDER BY p.id
       `, projectVisibilityParams),
       rows(`
         SELECT pm.project_id, pm.user_id, pm.member_role, u.role

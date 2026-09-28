@@ -195,6 +195,32 @@ async function insertProjectMoveNotification(
   return result.rows[0] ?? null;
 }
 
+async function insertTaskStatusAudit(
+  db: Queryable,
+  task: DbRow,
+  previousStatus: string,
+  nextStatus: string,
+  reason: string,
+  actorUserId: string,
+  actorName: string,
+) {
+  await db.query(`
+    INSERT INTO audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+    VALUES ($1, 'task_status_changed', 'task', $2, $3::jsonb)
+  `, [
+    actorUserId,
+    String(task.id),
+    JSON.stringify({
+      taskId: String(task.id),
+      taskTitle: asString(task.title),
+      previousStatus,
+      newStatus: nextStatus,
+      reason,
+      changedBy: actorName,
+    }),
+  ]);
+}
+
 router.post("/tasks", requireAuth, async (req, res): Promise<void> => {
   const actorRole = req.authUser!.role;
   if (actorRole === "INTERN") {
@@ -331,6 +357,14 @@ router.patch("/tasks/:id", requireAuth, async (req, res): Promise<void> => {
     ? current.sprint_id ?? null
     : normalizeOptionalNumber(req.body.sprintId);
   let nextAssignee = asString(current.assigned_to);
+  const currentStatus = asString(current.status, "To Do");
+  const statusChanged = currentStatus !== nextStatus;
+  const changeReason = asString(req.body?.changeReason).trim();
+
+  if (statusChanged && !changeReason) {
+    res.status(400).json({ error: "Reason is required." });
+    return;
+  }
 
   if (req.body?.assignedTo !== undefined || req.body?.assignedToUserId !== undefined) {
     const assignee = await findAssignableUser(
@@ -350,8 +384,11 @@ router.patch("/tasks/:id", requireAuth, async (req, res): Promise<void> => {
     nextAssignee = asString(assignee.user_id);
   }
 
+  const client = await pool.connect();
   try {
-    await pool.query(`
+    await client.query("BEGIN");
+
+    await client.query(`
       UPDATE tasks
       SET title = $2,
           description = $3,
@@ -377,7 +414,7 @@ router.patch("/tasks/:id", requireAuth, async (req, res): Promise<void> => {
       nextSprintId,
     ]);
 
-    const updated = await loadTask(pool, id);
+    const updated = await loadTask(client, id);
     const task = updated ? mapTask(updated) : null;
     const assignmentChanged = Boolean(nextAssignee) && nextAssignee !== asString(current.assigned_to)
       && (req.body?.assignedTo !== undefined || req.body?.assignedToUserId !== undefined);
@@ -385,11 +422,11 @@ router.patch("/tasks/:id", requireAuth, async (req, res): Promise<void> => {
       asString(current.project_id) !== asString(updated?.project_id);
     const assignmentNotificationRequested = isAdmin && req.body?.notifyAssignment === true;
     const notification = (assignmentChanged || assignmentNotificationRequested) && updated && nextAssignee && !projectChanged
-      ? await insertNotification(pool, nextAssignee, updated, req.authUser!.fullName)
+      ? await insertNotification(client, nextAssignee, updated, req.authUser!.fullName)
       : null;
     const projectNotification = projectChanged && updated && nextAssignee
       ? await insertProjectMoveNotification(
-          pool,
+          client,
           nextAssignee,
           updated,
           asString(current.project_name),
@@ -397,6 +434,19 @@ router.patch("/tasks/:id", requireAuth, async (req, res): Promise<void> => {
           req.authUser!.fullName,
         )
       : null;
+    if (statusChanged && updated) {
+      await insertTaskStatusAudit(
+        client,
+        updated,
+        currentStatus,
+        nextStatus,
+        changeReason,
+        req.authUser!.userId,
+        req.authUser!.fullName,
+      );
+    }
+
+    await client.query("COMMIT");
 
     emitToAll("task_updated", task);
     if (notification) {
@@ -407,8 +457,11 @@ router.patch("/tasks/:id", requireAuth, async (req, res): Promise<void> => {
     }
     res.json({ task });
   } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
     req.log?.error({ err: error }, "Task update failed");
     res.status(503).json({ error: "Unable to update task." });
+  } finally {
+    client.release();
   }
 });
 
